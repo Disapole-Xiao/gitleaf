@@ -6,7 +6,11 @@
   "publisher": "gitleaf",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gitleaf/gitleaf"
+    "url": "https://github.com/Disapole-Xiao/gitleaf"
+  },
+  "homepage": "https://github.com/Disapole-Xiao/gitleaf",
+  "bugs": {
+    "url": "https://github.com/Disapole-Xiao/gitleaf/issues"
   },
   "license": "MIT",
   "engines": {
