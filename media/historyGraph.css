@@ -1,0 +1,76 @@
+:root { color-scheme: light dark; }
+body { margin: 0; padding: 3px 0 8px; color: var(--vscode-foreground); background: var(--vscode-sideBar-background); font: var(--vscode-font-size)/1.4 var(--vscode-font-family); }
+button { font: inherit; color: inherit; border: 0; background: transparent; cursor: pointer; }
+[hidden] { display: none !important; }
+.commit, .file { box-sizing: border-box; display: flex; width: 100%; height: 25px; align-items: center; gap: 4px; text-align: left; white-space: nowrap; }
+.commit { position: relative; padding: 0 7px 0 28px; }
+.file { padding: 0 7px 0 6px; }
+.commit.lane-local, .commit.lane-remote, .commit.lane-join { padding-left: 44px; }
+.record { position: relative; --local-rail: var(--vscode-textLink-foreground, #4aa6ff); --remote-rail: var(--vscode-gitDecoration-addedResourceForeground, #73b987); }
+.record.expanded::before, .record.expanded.lane-remote::after { content: ''; position: absolute; top: 25px; bottom: 0; width: 1.7px; pointer-events: none; z-index: 1; }
+.record.expanded::before { left: 17.15px; background: var(--remote-rail); }
+.record.expanded.kind-local::before { left: 33.15px; background: var(--local-rail); }
+.record.expanded.lane-remote::after { left: 33.15px; background: var(--local-rail); }
+.rail { position: absolute; left: 4px; top: 0; width: 44px; height: 25px; overflow: visible; --local-rail: var(--vscode-textLink-foreground, #4aa6ff); --remote-rail: var(--vscode-gitDecoration-addedResourceForeground, #73b987); }
+.rail path { fill: none; stroke-width: 1.7; stroke-linecap: round; }
+.rail .track-local { stroke: var(--local-rail); }
+.rail .track-remote { stroke: var(--remote-rail); }
+.rail-node { fill: var(--vscode-sideBar-background); stroke: var(--local-rail); stroke-width: 1.7; transition: transform 120ms ease; transform-box: fill-box; transform-origin: center; }
+.rail.kind-remote .rail-node { stroke: var(--remote-rail); }
+.rail.synced .rail-node { fill: var(--local-rail); }
+.rail.kind-remote.synced .rail-node { fill: var(--remote-rail); }
+.commit:hover .rail-node, .commit:focus-visible .rail-node, .commit.selected .rail-node { transform: scale(1.2); }
+.commit-content { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commit-pointers { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; margin-left: auto; }
+.open-changes { position: absolute; right: 4px; top: 1px; z-index: 2; width: 23px; height: 23px; padding: 2px; display: grid; place-items: center; opacity: 0; pointer-events: none; }
+.commit:hover + .open-changes, .commit:focus-visible + .open-changes, .open-changes:hover, .open-changes:focus-visible { opacity: 1; pointer-events: auto; }
+.commit:hover, .commit:focus-visible { padding-right: 31px; }
+.open-changes:hover { background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)); border-radius: 4px; }
+.changes-icon { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.pointer { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px; height: 18px; box-sizing: border-box; border-radius: 999px; padding: 0 5px; font-size: 11px; line-height: 16px; border: 1px solid; }
+.pointer-local { color: var(--vscode-sideBar-background); background: var(--vscode-textLink-foreground, #4aa6ff); border-color: var(--vscode-textLink-foreground, #4aa6ff); }
+.pointer-remote { color: var(--vscode-sideBar-background); background: var(--vscode-gitDecoration-addedResourceForeground, #73b987); border-color: var(--vscode-gitDecoration-addedResourceForeground, #73b987); }
+.pointer.icon-only { width: 20px; justify-content: center; padding: 0; }
+.pointer-icon { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.commit:hover, .file:hover, .folder-name:hover, .menu-item:hover { background: var(--vscode-list-hoverBackground); }
+.commit.selected { background: var(--vscode-list-inactiveSelectionBackground); }
+button:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.version, .tag { flex-shrink: 0; font-size: 11px; padding: 0 5px; line-height: 17px; border-radius: 4px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+.version { font-variant-numeric: tabular-nums; padding: 0 6px; line-height: 17px; border-radius: 999px; background: transparent; color: var(--vscode-descriptionForeground); border: 1px solid var(--vscode-descriptionForeground); box-shadow: none; text-shadow: none; }
+.commit-content .version { display: inline-block; vertical-align: middle; }
+.commit-content .version:not(:first-child), .author, .pending { margin-left: 4px; }
+.filename { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.author { color: var(--vscode-descriptionForeground); font-size: 11px; }
+.pending { color: var(--vscode-editorWarning-foreground); }
+.record > .tree, .record > .file-list { margin-left: 36px; }
+.record.lane-local > .tree, .record.lane-remote > .tree, .record.lane-join > .tree,
+.record.lane-local > .file-list, .record.lane-remote > .file-list, .record.lane-join > .file-list { margin-left: 52px; }
+.folder > .tree { margin-left: 15px; }
+.folder-name { display: flex; align-items: center; gap: 6px; list-style: none; cursor: pointer; height: 25px; padding-left: 6px; }
+.folder-name::-webkit-details-marker { display: none; }
+.folder-name::before { content: ''; width: 7px; height: 7px; flex: 0 0 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform 120ms ease; }
+.folder[open] > .folder-name::before { transform: rotate(45deg); }
+.file-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex: 0 0 16px; color: var(--vscode-descriptionForeground); }
+.badge { margin-left: auto; font-size: 11px; padding-left: 5px; }
+.status-M, .status-R { color: var(--vscode-gitDecoration-modifiedResourceForeground); }
+.status-A, .status-U { color: var(--vscode-gitDecoration-addedResourceForeground); }
+.status-D { color: var(--vscode-gitDecoration-deletedResourceForeground); }
+.empty { margin: 6px 24px; color: var(--vscode-descriptionForeground); font-size: 11px; }
+footer { padding: 3px 10px; }
+.more { padding: 4px 0; text-align: left; color: var(--vscode-descriptionForeground); font-size: 11px; }
+.more:hover:not(:disabled) { color: var(--vscode-textLink-foreground); }
+.more:disabled { opacity: .5; cursor: wait; }
+#hover, #menu { position: fixed; z-index: 10; box-sizing: border-box; border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-panel-border)); border-radius: 5px; background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background)); color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); box-shadow: 0 3px 12px var(--vscode-widget-shadow, #0005); }
+#hover { width: min(350px, calc(100vw - 8px)); max-height: calc(100vh - 8px); overflow: auto; font-size: 12px; pointer-events: none; }
+.hover-heading { display: flex; align-items: center; gap: 7px; padding: 10px 12px 0; }
+.hover-heading strong { color: var(--vscode-textLink-foreground); font-weight: 600; }
+.avatar { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); font-size: 11px; }
+.hover-date { padding: 3px 12px 0 40px; color: var(--vscode-descriptionForeground); font-size: 11px; }
+.hover-message { padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.hover-stats { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-top: 1px solid var(--vscode-panel-border); }
+.hover-labels { padding: 0 12px 9px; display: flex; gap: 5px; flex-wrap: wrap; }
+.hover-labels .tag { overflow-wrap: anywhere; }
+.hover-footer { padding: 7px 12px; display: flex; justify-content: space-between; border-top: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); font-size: 11px; }
+#menu { padding: 4px; min-width: 180px; }
+.menu-item { display: block; width: 100%; text-align: left; padding: 5px 9px; border-radius: 3px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } .rail-node { transition: none; } }

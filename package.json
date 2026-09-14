@@ -1,0 +1,509 @@
+{
+  "name": "gitleaf",
+  "displayName": "GitLeaf",
+  "description": "Online collaboration and Git-style offline workflows for Overleaf projects",
+  "version": "1.0.3",
+  "publisher": "gitleaf",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gitleaf/gitleaf"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": "^20.17.0 || >=22.9.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "latex",
+    "overleaf",
+    "sync",
+    "tex"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "types": "./out/core/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./out/core/index.d.ts",
+      "default": "./out/core/index.js"
+    },
+    "./core": {
+      "types": "./out/core/index.d.ts",
+      "default": "./out/core/index.js"
+    }
+  },
+  "bin": {
+    "gitleaf": "./out/cli.js"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitleaf.discard",
+        "title": "GitLeaf: Discard Changes",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "gitleaf.discardAll",
+        "title": "GitLeaf: Discard All Changes",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "gitleaf.stash",
+        "title": "Stash Changes…",
+        "category": "GitLeaf",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "gitleaf.stashApply",
+        "title": "Apply Stash…",
+        "category": "GitLeaf"
+      },
+      {
+        "command": "gitleaf.stashPop",
+        "title": "Pop Stash…",
+        "category": "GitLeaf"
+      },
+      {
+        "command": "gitleaf.stashDrop",
+        "title": "Drop Stash…",
+        "category": "GitLeaf"
+      },
+      {
+        "command": "gitleaf.login",
+        "title": "GitLeaf: Login"
+      },
+      {
+        "command": "gitleaf.logout",
+        "title": "GitLeaf: Logout"
+      },
+      {
+        "command": "gitleaf.linkFolder",
+        "title": "GitLeaf: Link Folder to Overleaf Project"
+      },
+      {
+        "command": "gitleaf.unlinkFolder",
+        "title": "GitLeaf: Unlink Folder"
+      },
+      {
+        "command": "gitleaf.syncNow",
+        "title": "GitLeaf: Sync Now"
+      },
+      {
+        "command": "gitleaf.pullFromOverleaf",
+        "title": "Pull from Overleaf",
+        "category": "GitLeaf",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "gitleaf.pushToOverleaf",
+        "title": "Push to Overleaf",
+        "category": "GitLeaf",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "gitleaf.editIgnorePatterns",
+        "title": "GitLeaf: Edit Ignore Patterns"
+      },
+      {
+        "command": "gitleaf.cleanIgnoredRemoteFiles",
+        "title": "GitLeaf: Clean Ignored Files from Overleaf"
+      },
+      {
+        "command": "gitleaf.showSyncStatus",
+        "title": "GitLeaf: Show Sync Status"
+      },
+      {
+        "command": "gitleaf.setMainDocument",
+        "title": "GitLeaf: Set Main Document"
+      },
+      {
+        "command": "gitleaf.configure",
+        "title": "GitLeaf: Configure Settings"
+      },
+      {
+        "command": "gitleaf.jumpToCollaborator",
+        "title": "GitLeaf: Jump to Collaborator"
+      },
+      {
+        "command": "gitleaf.verifyCredentials",
+        "title": "GitLeaf: Verify Credentials"
+      },
+      {
+        "command": "gitleaf.refreshCookie",
+        "title": "GitLeaf: Refresh Cookie"
+      },
+      {
+        "command": "gitleaf.commit",
+        "title": "Commit Offline Changes",
+        "category": "GitLeaf",
+        "icon": "$(check)"
+      },
+      {
+        "command": "gitleaf.refreshChanges",
+        "title": "Refresh Offline Changes",
+        "category": "GitLeaf",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitleaf.showHistory",
+        "title": "Show Commit History",
+        "category": "GitLeaf",
+        "icon": "$(history)"
+      },
+      {
+        "command": "gitleaf.markResolved",
+        "title": "GitLeaf: Mark Conflict Resolved",
+        "icon": "$(check)"
+      },
+      {
+        "command": "gitleaf.abortPull",
+        "title": "GitLeaf: Abort Pull"
+      },
+      {
+        "command": "gitleaf.changeMode",
+        "title": "GitLeaf: Change Sync Mode"
+      },
+      {
+        "command": "gitleaf.stage",
+        "title": "GitLeaf: Stage Changes",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitleaf.unstage",
+        "title": "GitLeaf: Unstage Changes",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "gitleaf.stageAll",
+        "title": "GitLeaf: Stage All Changes",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitleaf.unstageAll",
+        "title": "GitLeaf: Unstage All Changes",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "gitleaf.fetch",
+        "title": "Fetch from Overleaf",
+        "category": "GitLeaf",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "gitleaf.remoteHistory",
+        "title": "Show Overleaf Server History",
+        "category": "GitLeaf",
+        "icon": "$(history)"
+      },
+      {
+        "command": "gitleaf.refreshHistory",
+        "title": "GitLeaf: Refresh History Graph",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitleaf.historyViewAsList",
+        "title": "View as List",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "gitleaf.historyViewAsTree",
+        "title": "View as Tree",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "gitleaf.historyViewAsListSelected",
+        "title": "✓ View as List"
+      },
+      {
+        "command": "gitleaf.historyViewAsTreeSelected",
+        "title": "✓ View as Tree"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "gitleaf.stash",
+          "when": "scmProvider == gitleaf",
+          "group": "3_stash@1"
+        },
+        {
+          "command": "gitleaf.stashApply",
+          "when": "scmProvider == gitleaf",
+          "group": "3_stash@2"
+        },
+        {
+          "command": "gitleaf.stashPop",
+          "when": "scmProvider == gitleaf",
+          "group": "3_stash@3"
+        },
+        {
+          "command": "gitleaf.stashDrop",
+          "when": "scmProvider == gitleaf",
+          "group": "3_stash@4"
+        },
+        {
+          "command": "gitleaf.refreshChanges",
+          "when": "scmProvider == gitleaf",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitleaf.showHistory",
+          "when": "scmProvider == gitleaf",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitleaf.pullFromOverleaf",
+          "when": "scmProvider == gitleaf",
+          "group": "1_sync@1"
+        },
+        {
+          "command": "gitleaf.pushToOverleaf",
+          "when": "scmProvider == gitleaf",
+          "group": "1_sync@2"
+        },
+        {
+          "command": "gitleaf.commit",
+          "when": "scmProvider == gitleaf",
+          "group": "navigation@0"
+        },
+        {
+          "command": "gitleaf.fetch",
+          "when": "scmProvider == gitleaf",
+          "group": "1_sync@0"
+        },
+        {
+          "command": "gitleaf.remoteHistory",
+          "when": "scmProvider == gitleaf",
+          "group": "2_history"
+        }
+      ],
+      "scm/repository": [
+        {
+          "command": "gitleaf.commit",
+          "when": "scmProvider == gitleaf",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "gitleaf.pullFromOverleaf",
+          "when": "scmProvider == gitleaf",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "gitleaf.pushToOverleaf",
+          "when": "scmProvider == gitleaf",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "gitleaf.fetch",
+          "when": "scmProvider == gitleaf",
+          "group": "1_actions@4"
+        },
+        {
+          "command": "gitleaf.refreshChanges",
+          "when": "scmProvider == gitleaf",
+          "group": "1_actions@5"
+        },
+        {
+          "command": "gitleaf.showHistory",
+          "when": "scmProvider == gitleaf",
+          "group": "2_history@1"
+        },
+        {
+          "command": "gitleaf.remoteHistory",
+          "when": "scmProvider == gitleaf",
+          "group": "2_history@2"
+        },
+        {
+          "command": "gitleaf.stash",
+          "when": "scmProvider == gitleaf",
+          "group": "3_stash@1"
+        },
+        {
+          "command": "gitleaf.stashApply",
+          "when": "scmProvider == gitleaf",
+          "group": "3_stash@2"
+        },
+        {
+          "command": "gitleaf.stashPop",
+          "when": "scmProvider == gitleaf",
+          "group": "3_stash@3"
+        },
+        {
+          "command": "gitleaf.stashDrop",
+          "when": "scmProvider == gitleaf",
+          "group": "3_stash@4"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "gitleaf.discard",
+          "when": "scmProvider == gitleaf && scmResourceGroup == changes",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitleaf.markResolved",
+          "when": "scmProvider == gitleaf && scmResourceGroup == conflicts",
+          "group": "inline"
+        },
+        {
+          "command": "gitleaf.stage",
+          "when": "scmProvider == gitleaf && scmResourceGroup == changes",
+          "group": "inline"
+        },
+        {
+          "command": "gitleaf.unstage",
+          "when": "scmProvider == gitleaf && scmResourceGroup == staged",
+          "group": "inline"
+        }
+      ],
+      "scm/resourceGroup/context": [
+        {
+          "command": "gitleaf.discardAll",
+          "when": "scmProvider == gitleaf && scmResourceGroup == changes",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitleaf.stageAll",
+          "when": "scmProvider == gitleaf && scmResourceGroup == changes",
+          "group": "inline"
+        },
+        {
+          "command": "gitleaf.unstageAll",
+          "when": "scmProvider == gitleaf && scmResourceGroup == staged",
+          "group": "inline"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "gitleaf.fetch",
+          "when": "view == gitleaf.history",
+          "group": "navigation@0"
+        },
+        {
+          "command": "gitleaf.refreshHistory",
+          "when": "view == gitleaf.history",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitleaf.historyViewAsList",
+          "when": "view == gitleaf.history && gitleaf.historyMode == tree",
+          "group": "2_view@1"
+        },
+        {
+          "command": "gitleaf.historyViewAsListSelected",
+          "when": "view == gitleaf.history && gitleaf.historyMode == list",
+          "group": "2_view@1"
+        },
+        {
+          "command": "gitleaf.historyViewAsTree",
+          "when": "view == gitleaf.history && gitleaf.historyMode == list",
+          "group": "2_view@2"
+        },
+        {
+          "command": "gitleaf.historyViewAsTreeSelected",
+          "when": "view == gitleaf.history && gitleaf.historyMode == tree",
+          "group": "2_view@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gitleaf.discard",
+          "when": "false"
+        },
+        {
+          "command": "gitleaf.stage",
+          "when": "false"
+        },
+        {
+          "command": "gitleaf.unstage",
+          "when": "false"
+        },
+        {
+          "command": "gitleaf.historyViewAsListSelected",
+          "when": "false"
+        },
+        {
+          "command": "gitleaf.historyViewAsTreeSelected",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "GitLeaf",
+      "properties": {
+        "gitleaf.defaultServer": {
+          "type": "string",
+          "default": "https://www.overleaf.com",
+          "description": "Default Overleaf server URL"
+        },
+        "gitleaf.autoSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic sync in online mode"
+        },
+        "gitleaf.liveSyncDebounce": {
+          "type": "number",
+          "default": 250,
+          "minimum": 100,
+          "description": "Milliseconds to debounce live document updates"
+        }
+      }
+    },
+    "views": {
+      "scm": [
+        {
+          "id": "gitleaf.history",
+          "type": "webview",
+          "name": "GitLeaf Graph",
+          "when": "gitleaf.mode == offline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src scripts --ext ts,cjs",
+    "check": "npm run compile && npm run lint",
+    "test": "node ./out/test/runTest.js && node ./out/test/cliTest.js && npm run test:cli-install",
+    "test:cli": "node ./out/test/cliTest.js",
+    "test:cli-install": "node --test scripts/test-cli-install.cjs",
+    "prepack": "npm run compile",
+    "postinstall": "patch-package"
+  },
+  "devDependencies": {
+    "@types/diff-match-patch": "^1.0.36",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^20.10.0",
+    "@types/node-fetch": "^2.6.9",
+    "@types/proper-lockfile": "4.1.4",
+    "@types/socket.io-client": "^1.4.36",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.55.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "2.0.0",
+    "cmd-shim": "8.0.0",
+    "diff-match-patch": "^1.0.5",
+    "form-data": "^4.0.0",
+    "ignore": "7.0.5",
+    "mime-types": "^2.1.35",
+    "node-fetch": "^2.7.0",
+    "ot-json0": "1.1.0",
+    "patch-package": "8.0.1",
+    "proper-lockfile": "4.1.2",
+    "socket.io-client": "github:overleaf/socket.io-client#0.9.17-overleaf-5",
+    "trash": "10.1.1"
+  }
+}
