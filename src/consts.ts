@@ -2,7 +2,7 @@
  * GitLeaf Constants
  */
 
-export const EXTENSION_ID = 'gitleaf.gitleaf';
+export const EXTENSION_ID = 'DisapoleXiao.gitleaf';
 export const EXTENSION_NAME = 'GitLeaf';
 
 // Configuration paths

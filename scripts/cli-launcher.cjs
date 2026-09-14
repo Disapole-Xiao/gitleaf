@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const extensionId = 'gitleaf.gitleaf';
+const extensionId = 'DisapoleXiao.gitleaf';
 const manifestName = '.gitleaf-cli-install.json';
 
 function locateExtension(code) {
@@ -23,7 +23,7 @@ function locateExtension(code) {
         env.GITLEAF_CODE_COMMAND = code;
         args = ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
             '$ErrorActionPreference = "Stop"; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ' +
-            '& $env:GITLEAF_CODE_COMMAND --locate-extension gitleaf.gitleaf; exit $LASTEXITCODE'];
+            '& $env:GITLEAF_CODE_COMMAND --locate-extension DisapoleXiao.gitleaf; exit $LASTEXITCODE'];
     }
     const result = spawnSync(command, args, {
         encoding: 'utf8', env, windowsHide: true, timeout: 20000,

@@ -3,7 +3,7 @@
   "displayName": "GitLeaf",
   "description": "Online collaboration and Git-style offline workflows for Overleaf projects",
   "version": "1.0.3",
-  "publisher": "gitleaf",
+  "publisher": "DisapoleXiao",
   "repository": {
     "type": "git",
     "url": "https://github.com/Disapole-Xiao/gitleaf"
