@@ -6,6 +6,7 @@ import type { GitContentProvider } from './scmProvider';
 import { RemoteHistorySource } from './remoteHistory';
 import { PublicationState } from './publications';
 import { HistorySyncState, isHistoryNodeSynced } from './historyState';
+import { HistorySnapshot, changedSnapshotPaths, snapshotDiffBytes } from './historySnapshot';
 
 export type HistoryAction = 'label' | 'restore' | 'hard' | 'soft';
 export interface HistoryPosition { baseVersion?: number }
@@ -16,6 +17,10 @@ export type HistoryCommitNode =
 export type HistoryNode = HistoryCommitNode
     | { kind: 'file'; id: string; parent: HistoryCommitNode; file: CommitFile }
     | { kind: 'more'; source: 'local' | 'remote' };
+
+export function historyVersionLabel(node: HistoryCommitNode): string {
+    return node.kind === 'local' ? node.commit.hash.slice(0, 8) : `Overleaf v${node.update.toV}`;
+}
 
 /** History data and native diffs, independent of the graph presentation. */
 export class HistoryModel implements vscode.Disposable {
@@ -37,6 +42,7 @@ export class HistoryModel implements vscode.Disposable {
     private remoteEndReached = false;
     private loading?: Promise<void>;
     private disposed = false;
+    private comparing = false;
 
     constructor(
         private readonly repository: GitRepository,
@@ -201,6 +207,34 @@ export class HistoryModel implements vscode.Disposable {
         const title = record.kind === 'local' ? `Changes in ${record.commit.subject}`
             : `Changes in Overleaf v${record.update.toV}`;
         await vscode.commands.executeCommand('vscode.changes', title, changes);
+    }
+
+    async compare(before: HistoryCommitNode, after: HistoryCommitNode): Promise<void> {
+        if (this.disposed || this.comparing) return;
+        this.comparing = true;
+        const title = `${historyVersionLabel(before)} → ${historyVersionLabel(after)}`;
+        try {
+            await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Comparing ${title}` }, async () => {
+                const snapshot = (node: HistoryCommitNode): Promise<HistorySnapshot> => node.kind === 'local'
+                    ? this.repository.readSnapshot(node.commit.hash) : this.remoteSource.snapshot(node.update.toV);
+                const [left, right] = await Promise.all([snapshot(before), snapshot(after)]);
+                if (this.disposed) return;
+                const paths = changedSnapshotPaths(left, right);
+                if (!paths.length) {
+                    void vscode.window.showInformationMessage(`GitLeaf: ${title}: no file differences.`);
+                    return;
+                }
+                const resource = (node: HistoryCommitNode, file: string, bytes: Uint8Array | undefined): vscode.Uri | undefined =>
+                    bytes === undefined ? undefined : this.content.comparison.snapshot(this.repository.root,
+                        node.kind === 'local' ? node.commit.hash : `overleaf-v${node.update.toV}`, file, bytes);
+                const changes = paths.map(file => {
+                    const [original, modified] = snapshotDiffBytes(file, left.get(file), right.get(file));
+                    return [vscode.Uri.file(path.join(this.repository.root, ...file.split('/'))),
+                        resource(before, file, original), resource(after, file, modified)];
+                });
+                await vscode.commands.executeCommand('vscode.changes', title, changes);
+            });
+        } finally { this.comparing = false; }
     }
 
     private async changeResources(node: Extract<HistoryNode, { kind: 'file' }>): Promise<readonly [vscode.Uri, vscode.Uri]> {

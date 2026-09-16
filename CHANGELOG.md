@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Compare any two local or Overleaf history versions from GitLeaf Graph using
+  Select for Compare and Compare with Selected. Open all changed files in a
+  native diff view, including additions, deletions and binary change summaries,
+  without modifying the worktree or sync state.
+
 ## 1.0.3 — First public release
 
 - Link any local folder to an Overleaf project in Online or Offline mode.

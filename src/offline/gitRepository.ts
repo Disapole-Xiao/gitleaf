@@ -352,9 +352,14 @@ export class GitRepository {
     }
 
     async committedSnapshot(ref = 'HEAD'): Promise<Map<string, Uint8Array>> {
+        const ignored = ignoreMatcher(await this.refreshIgnoreRules());
+        return this.readSnapshot(ref, ignored);
+    }
+
+    /** Read an exact tree without changing the worktree, index, refs or ignore rules. */
+    async readSnapshot(ref: string, ignored: (file: string) => boolean = () => false): Promise<Map<string, Uint8Array>> {
         const files = await this.run(['ls-tree', '-r', '--name-only', '-z', ref]);
         const snapshot = new Map<string, Uint8Array>();
-        const ignored = ignoreMatcher(await this.refreshIgnoreRules());
         for (const file of files.stdout.toString('utf8').split('\0').filter(Boolean)) {
             if (ignored(file)) continue;
             const result = await this.run(['show', `${ref}:${validateRelativePath(file)}`]);

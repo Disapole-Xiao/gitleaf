@@ -45,6 +45,7 @@ If Pull encounters a conflict, choose which version to keep under **Merge Change
 
 - Open **GitLeaf Graph** in Source Control. Use the button on the right of a history record to view the diffs for all changed files.
 - Click a record to expand its changed files, then click a file to view its individual diff.
+- To compare two versions, right-click the first and choose **Select for Compare**, then right-click the second and choose **Compare with Selected**. The selected version is on the left. Local commits and Overleaf versions can be compared in any combination, without changing your working files. Binary changes show size and content summaries.
 - Right-click a remote record to **Restore** or **Label** a version and sync that action to Overleaf.
 - Right-click an unpublished local record to undo commits with **Revert Soft** or **Revert Hard**. Soft keeps the changes from the removed commits; Hard discards those changes, but is unavailable while you have uncommitted changes.
 

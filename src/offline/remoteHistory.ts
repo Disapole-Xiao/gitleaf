@@ -4,6 +4,7 @@ import { ProjectStore } from '../core/projectStore';
 import { CommitFile } from './gitRepository';
 import { historyRequestsFor } from '../api/historyRequest';
 import { sharedHistoryRequest } from '../core/historyCache';
+import { HistorySnapshot, readHistoryArchive } from './historySnapshot';
 
 /** History API segments are unchanged/deleted/inserted text, not Git commits. */
 export function historyTexts(response: HistoryDiff): { before: string; after: string } {
@@ -24,6 +25,7 @@ export function historyFile(file: HistoryFile): CommitFile | undefined {
 }
 
 export interface RemoteHistorySource {
+    snapshot(version: number): Promise<HistorySnapshot>;
     list(before?: number): Promise<HistoryPage>;
     files(update: HistoryUpdate): Promise<CommitFile[]>;
     texts(update: HistoryUpdate, pathname: string): Promise<{ before: string; after: string }>;
@@ -99,6 +101,13 @@ export class OverleafHistory implements RemoteHistorySource {
         this.latestStale = true;
         return this.queued(this.key('restore', version), 0,
             () => this.request((api, project) => api.restoreHistory(project, version)));
+    }
+
+    snapshot(version: number): Promise<HistorySnapshot> {
+        // A zero lifetime preserves account-wide pacing/429 cooldown across
+        // processes without serializing binary snapshots into the JSON cache.
+        return this.queued(this.key('snapshot', version), 0,
+            async () => readHistoryArchive(await this.request((api, project) => api.downloadHistoryVersion(project, version))));
     }
 
     async files(update: HistoryUpdate): Promise<CommitFile[]> {

@@ -373,6 +373,23 @@ export class BaseAPI {
         return this.getJson(`project/${encodeURIComponent(project)}/revert-project`, { version });
     }
 
+    /** Exact historical files, including binaries; authentication errors are never an empty snapshot. */
+    async downloadHistoryVersion(project: string, version: number): Promise<Buffer> {
+        if (!Number.isSafeInteger(version) || version < 0) throw new Error('Invalid history version.');
+        if (!this.identity) throw new Error('Not authenticated');
+        const route = `project/${encodeURIComponent(project)}/version/${version}/zip`;
+        const res = await fetch(this.url + route, {
+            redirect: 'manual', agent: this.agent, timeout: 60000, size: 256 * 1024 * 1024,
+            headers: { Cookie: this.identity.cookies, Accept: 'application/zip', 'User-Agent': USER_AGENT },
+        });
+        this.historyLog(`History GET project/:id/version/${version}/zip → ${res.status}`);
+        if (res.status !== 200) {
+            await res.text();
+            throw new HistoryRequestError(res.status, res.status === 429 ? historyRetryAt(res.headers.get('retry-after')) : undefined);
+        }
+        return res.buffer();
+    }
+
     getHistory(project: string, before?: number): Promise<HistoryPage> {
         const query = new URLSearchParams({ min_count: '5' });
         if (before !== undefined) query.set('before', String(before));

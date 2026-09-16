@@ -7,7 +7,7 @@
     const hover = document.getElementById('hover'), menu = document.getElementById('menu');
     const files = new Map(), pending = new Set(), expanded = new Set();
     const state = vscode.getState();
-    let records = [], selected = state?.session === session ? state.selected : undefined;
+    let records = [], comparison, selected = state?.session === session ? state.selected : undefined;
     let mode = state?.mode === 'list' ? 'list' : 'tree', iconTheme, iconThemeReady = false, hoverTimer, hideTimer, hoverOwner;
     const iconStyle = document.createElement('style'); iconStyle.setAttribute('nonce', session); document.head.append(iconStyle);
     document.body.dataset.mode = mode;
@@ -52,11 +52,16 @@
     }
     function showMenu(row, event, button) {
         event.preventDefault(); hideHover(); menu.replaceChildren();
-        const actions = [['label', 'Label…']];
+        const actions = [];
+        if (comparison && comparison.id !== row.id) actions.push(['compare', 'Compare with Selected']);
+        actions.push(['selectCompare', 'Select for Compare']);
+        if (comparison) actions.push(['clearCompare', 'Clear Compare Selection']);
+        actions.push(['label', 'Label…']);
         if (row.kind === 'remote') actions.push(['restore', 'Restore and Sync…']);
         else if (!row.pending) actions.push(['soft', 'Revert · Soft…'], ['hard', 'Revert · Hard…']);
         for (const [type, text] of actions) {
             const item = el('button', 'menu-item', text); item.setAttribute('role', 'menuitem');
+            if (type === 'compare') item.title = `Compare with ${comparison.label} (left side)`;
             item.addEventListener('click', () => { menu.hidden = true; button.focus(); post(type, row.id); });
             menu.append(item);
         }
@@ -221,6 +226,12 @@
             }
             if (row.pending) content.append(el('span', 'pending', '◷'));
             button.append(content);
+            if (comparison?.id === row.id) {
+                const marker = el('span', 'compare-marker', '⇄');
+                marker.title = 'Selected for Compare';
+                marker.setAttribute('aria-label', 'Selected for Compare');
+                button.append(marker);
+            }
             if (row.pointers.length) {
                 const badges = el('span', 'commit-pointers');
                 const folded = row.pointers.includes('LOCAL') && row.pointers.includes('REMOTE');
@@ -273,6 +284,7 @@
         if (message.session !== session) return;
         if (message.type === 'records') {
             records = message.rows;
+            comparison = message.comparison;
             if (message.mode === 'list' || message.mode === 'tree') {
                 mode = message.mode; document.body.dataset.mode = mode;
                 vscode.setState({ selected, session, mode });
@@ -289,6 +301,8 @@
                 more.addEventListener('click', () => { more.disabled = true; vscode.postMessage({ type: 'more', source, session }); }); paging.append(more);
             }
             render();
+        } else if (message.type === 'comparison') {
+            comparison = message.comparison; render();
         } else if (message.type === 'mode') {
             setMode(message.mode);
         } else if (message.type === 'iconTheme') {

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { randomBytes } from 'crypto';
-import { HistoryModel, HistoryCommitNode } from './historyModel';
+import { HistoryModel, HistoryCommitNode, historyVersionLabel } from './historyModel';
 import { layoutHistory } from './historyLayout';
 import { historyGraphHtml } from './historyGraphHtml';
 import { OperationBlockedError } from './operationBlocked';
@@ -22,6 +22,7 @@ export class HistoryGraph implements vscode.WebviewViewProvider, vscode.Disposab
     private model?: HistoryModel;
     private session = '';
     private selected?: string;
+    private compareBase?: HistoryCommitNode;
     private mode: 'list' | 'tree';
     private readonly notifications = new Set<string>();
 
@@ -55,6 +56,7 @@ export class HistoryGraph implements vscode.WebviewViewProvider, vscode.Disposab
     private clearModel(): void {
         this.model = undefined;
         this.selected = undefined;
+        this.compareBase = undefined;
         this.records.clear();
         this.modelDisposables.splice(0).forEach(item => item.dispose());
     }
@@ -95,7 +97,8 @@ export class HistoryGraph implements vscode.WebviewViewProvider, vscode.Disposab
             const commits = nodes.filter((node): node is HistoryCommitNode => node.kind === 'local' || node.kind === 'remote');
             this.records = new Map(commits.map(node => [node.id, node]));
             await view.webview.postMessage({ type: 'records', session, mode: this.mode, ...layoutHistory(commits, model?.graphPosition()),
-                more: nodes.filter(node => node.kind === 'more').map(node => node.source), selected: this.selected });
+                more: nodes.filter(node => node.kind === 'more').map(node => node.source), selected: this.selected,
+                comparison: this.comparisonSelection() });
             if (this.session === session) this.selected = undefined;
         } catch (error) {
             if (this.session === session && this.view === view && this.model === model) void this.notify(error, 'Load history');
@@ -127,6 +130,10 @@ export class HistoryGraph implements vscode.WebviewViewProvider, vscode.Disposab
         } finally { this.notifications.delete(message); }
     }
 
+    private comparisonSelection(): { id: string; label: string } | undefined {
+        return this.compareBase ? { id: this.compareBase.id, label: historyVersionLabel(this.compareBase) } : undefined;
+    }
+
     private async receive(message: unknown): Promise<void> {
         if (!message || typeof message !== 'object') return;
         const { type, id, index, source, session } = message as Record<string, unknown>;
@@ -139,6 +146,15 @@ export class HistoryGraph implements vscode.WebviewViewProvider, vscode.Disposab
             if (typeof id !== 'string') return;
             const record = this.records.get(id);
             if (!record) return;
+            if (type === 'selectCompare' || type === 'clearCompare') {
+                this.compareBase = type === 'selectCompare' ? record : undefined;
+                await this.view?.webview.postMessage({ type: 'comparison', session, comparison: this.comparisonSelection() });
+                return;
+            }
+            if (type === 'compare') {
+                if (this.compareBase && this.compareBase.id !== record.id) await model.compare(this.compareBase, record);
+                return;
+            }
             if (type === 'label' || type === 'restore' || type === 'hard' || type === 'soft') {
                 await model.action(record, type);
                 return;
@@ -161,7 +177,7 @@ export class HistoryGraph implements vscode.WebviewViewProvider, vscode.Disposab
                 await this.view?.webview.postMessage({ type: 'requestFailed', session, id, source, action: type });
             }
             const operation = ({ files: 'Load changed files', open: 'Open diff', openAll: 'Open changes', more: 'Load older history',
-                label: 'Label', restore: 'Restore', hard: 'Hard Revert', soft: 'Soft Revert' } as Record<string, string>)[String(type)] || 'History';
+                compare: 'Compare versions', label: 'Label', restore: 'Restore', hard: 'Hard Revert', soft: 'Soft Revert' } as Record<string, string>)[String(type)] || 'History';
             void this.notify(error, operation);
         }
     }

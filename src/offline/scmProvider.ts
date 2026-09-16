@@ -6,6 +6,7 @@ import { HistoryModel, HistoryAction, HistoryCommitNode } from './historyModel';
 import { HistoryGraph } from './historyGraph';
 import { RemoteHistorySource } from './remoteHistory';
 import { GitLeafFileDecorations } from './fileDecorations';
+import { SnapshotContentProvider, SNAPSHOT_SCHEME } from './snapshotContentProvider';
 
 const GIT_CONTENT_SCHEME = 'gitleaf-git';
 const EMPTY_REF = '__empty__';
@@ -37,6 +38,7 @@ export interface GitResourceState extends vscode.SourceControlResourceState {
 
 /** Serves commit blobs to VS Code's native diff editor. */
 export class GitContentProvider implements vscode.TextDocumentContentProvider {
+    readonly comparison = new SnapshotContentProvider();
     private readonly repositories = new Map<string, GitRepository>();
     private readonly served = new Map<string, vscode.Uri>();
     private readonly snapshots = new Map<string, string>();
@@ -233,5 +235,7 @@ export class OfflineScmProvider implements vscode.Disposable {
 export function registerGitContentProvider(context: vscode.ExtensionContext): GitContentProvider {
     const provider = new GitContentProvider();
     context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(GIT_CONTENT_SCHEME, provider));
+    context.subscriptions.push(provider.comparison,
+        vscode.workspace.registerFileSystemProvider(SNAPSHOT_SCHEME, provider.comparison, { isReadonly: true, isCaseSensitive: true }));
     return provider;
 }

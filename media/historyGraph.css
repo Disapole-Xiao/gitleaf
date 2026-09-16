@@ -42,6 +42,7 @@ button:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-fo
 .filename { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .author { color: var(--vscode-descriptionForeground); font-size: 11px; }
 .pending { color: var(--vscode-editorWarning-foreground); }
+.compare-marker { flex: 0 0 auto; color: var(--vscode-textLink-foreground); font-size: 16px; }
 .record > .tree, .record > .file-list { margin-left: 36px; }
 .record.lane-local > .tree, .record.lane-remote > .tree, .record.lane-join > .tree,
 .record.lane-local > .file-list, .record.lane-remote > .file-list, .record.lane-join > .file-list { margin-left: 52px; }
