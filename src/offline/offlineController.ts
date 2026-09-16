@@ -52,6 +52,8 @@ export class OfflineController implements vscode.Disposable {
             (node, action) => this.serialize(() => this.historyAction(node, action)),
         );
         await this.execute({ type: 'initialize', fetch: fetchInitial });
+        // SCM needs the same remote history even when the Graph view is closed.
+        await this.refreshHistory();
     }
     async cloneInitialSnapshot(): Promise<void> {
         await this.execute({ type: 'initialize', fetch: true });

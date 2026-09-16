@@ -5,6 +5,7 @@ import { CommitFile, CommitInfo, GitRepository } from './gitRepository';
 import type { GitContentProvider } from './scmProvider';
 import { RemoteHistorySource } from './remoteHistory';
 import { PublicationState } from './publications';
+import { HistorySyncState, isHistoryNodeSynced } from './historyState';
 
 export type HistoryAction = 'label' | 'restore' | 'hard' | 'soft';
 export interface HistoryPosition { baseVersion?: number }
@@ -26,11 +27,14 @@ export class HistoryModel implements vscode.Disposable {
     private remote: HistoryCommitNode[] = [];
     private readonly files = new Map<string, Promise<HistoryNode[]>>();
     private localLimit = 100;
+    private localHasMore = false;
     private remoteLimit = 5;
     private receipts: PublicationState = { published: [], labels: {} };
     private position: HistoryPosition = {};
     private nextBefore?: number;
     private remoteLoaded = false;
+    private remoteKnown = false;
+    private remoteEndReached = false;
     private loading?: Promise<void>;
     private disposed = false;
 
@@ -44,7 +48,7 @@ export class HistoryModel implements vscode.Disposable {
 
     async refreshLocal(): Promise<void> {
         const [commits, receipts, pulling] = await Promise.all([
-            this.repository.unpublished(this.localLimit), this.repository.publications.read(), this.repository.isRebasing(),
+            this.repository.unpublished(this.localLimit + 1), this.repository.publications.read(), this.repository.isRebasing(),
         ]);
         if (this.disposed) return;
         this.receipts = receipts;
@@ -58,12 +62,51 @@ export class HistoryModel implements vscode.Disposable {
             }
         }
         this.position = { baseVersion };
-        this.local = commits.filter(commit => !receipts.published.some(item => item.commit.hash === commit.hash))
+        this.localHasMore = commits.length > this.localLimit;
+        this.local = commits.slice(0, this.localLimit).filter(commit => !receipts.published.some(item => item.commit.hash === commit.hash))
             .map(commit => ({ kind: 'local', id: `git:${commit.hash}`, commit, labels: receipts.labels[commit.hash], pending: receipts.pending?.commit.hash === commit.hash }));
         this.changed.fire();
     }
 
     graphPosition(): HistoryPosition { return this.position; }
+
+    syncState(): HistorySyncState {
+        const base = this.position.baseVersion;
+        const known = this.remoteKnown && base !== undefined;
+        return {
+            incoming: known ? this.remoteNodes().filter(node => !isHistoryNodeSynced(node, this.position)).length : undefined,
+            outgoing: this.local.length,
+            incomingComplete: known && (this.remoteEndReached
+                || this.remote.some(node => node.kind === 'remote' && node.update.fromV <= base)),
+            outgoingComplete: !this.localHasMore,
+        };
+    }
+
+    private remoteNodes(limit = this.remote.length): HistoryCommitNode[] {
+        const records: HistoryCommitNode[] = [];
+        const remote = this.remote.filter((item): item is Extract<HistoryCommitNode, { kind: 'remote' }> => item.kind === 'remote')
+            .sort((a, b) => b.update.toV - a.update.toV).slice(0, limit);
+        for (const node of remote) {
+            const cuts = new Set([node.update.fromV, node.update.toV]);
+            for (const receipt of this.receipts.published) {
+                for (const version of [receipt.fromV, receipt.toV]) if (version > node.update.fromV && version < node.update.toV) cuts.add(version);
+            }
+            const baseVersion = this.position.baseVersion;
+            if (baseVersion !== undefined && baseVersion > node.update.fromV && baseVersion < node.update.toV) cuts.add(baseVersion);
+            const versions = [...cuts].sort((a, b) => b - a);
+            for (let index = 0; index < versions.length - 1; index++) {
+                const toV = versions[index], fromV = versions[index + 1];
+                const receipt = this.receipts.published.find(item => item.toV === toV);
+                // A published snapshot can span multiple server summaries.
+                // Verified receipts combine them; timestamps never do.
+                if (this.receipts.published.some(item => toV < item.toV && toV > item.fromV)) continue;
+                records.push({ kind: 'remote', id: `overleaf:${receipt?.fromV ?? fromV}:${toV}`, commit: receipt?.commit,
+                    update: { ...node.update, fromV: receipt?.fromV ?? fromV, toV,
+                        labels: node.update.labels?.filter(label => label.version === toV) } });
+            }
+        }
+        return records;
+    }
 
     private loadRemote(append = false): Promise<void> {
         if (this.loading) return this.loading;
@@ -80,6 +123,10 @@ export class HistoryModel implements vscode.Disposable {
                 this.remote = [...records.values()];
                 this.nextBefore = page.nextBeforeTimestamp !== before ? page.nextBeforeTimestamp : undefined;
                 this.remoteLoaded = true;
+                this.remoteKnown = true;
+                this.remoteEndReached = page.nextBeforeTimestamp === undefined;
+                // Includes the lazy first page, not just explicit Graph refreshes.
+                this.changed.fire();
             } catch (error) {
                 if (!this.disposed) {
                     // Do not retry on every worktree event. Refresh explicitly retries.
@@ -111,32 +158,10 @@ export class HistoryModel implements vscode.Disposable {
     async getChildren(node?: HistoryNode): Promise<HistoryNode[]> {
         if (!node) {
             if (!this.remoteLoaded) await this.loadRemote();
-            const records: HistoryCommitNode[] = [...this.local];
-            const remote = this.remote.filter((item): item is Extract<HistoryCommitNode, { kind: 'remote' }> => item.kind === 'remote')
-                .sort((a, b) => b.update.toV - a.update.toV).slice(0, this.remoteLimit);
-            for (const node of remote) {
-                const cuts = new Set([node.update.fromV, node.update.toV]);
-                for (const receipt of this.receipts.published) {
-                    for (const version of [receipt.fromV, receipt.toV]) if (version > node.update.fromV && version < node.update.toV) cuts.add(version);
-                }
-                const baseVersion = this.position.baseVersion;
-                if (baseVersion !== undefined && baseVersion > node.update.fromV && baseVersion < node.update.toV) cuts.add(baseVersion);
-                const versions = [...cuts].sort((a, b) => b - a);
-                for (let index = 0; index < versions.length - 1; index++) {
-                    const toV = versions[index], fromV = versions[index + 1];
-                    const receipt = this.receipts.published.find(item => item.toV === toV);
-                    // A published snapshot can span multiple server summaries.
-                    // Verified receipts combine them; timestamps never do.
-                    if (this.receipts.published.some(item => toV < item.toV && toV > item.fromV)) continue;
-                    records.push({ kind: 'remote', id: `overleaf:${receipt?.fromV ?? fromV}:${toV}`, commit: receipt?.commit,
-                        update: { ...node.update, fromV: receipt?.fromV ?? fromV, toV,
-                            labels: node.update.labels?.filter(label => label.version === toV) } });
-                }
-            }
             return [
-                ...records,
+                ...this.local, ...this.remoteNodes(this.remoteLimit),
                 ...(this.nextBefore !== undefined || this.remote.length > this.remoteLimit ? [{ kind: 'more' as const, source: 'remote' as const }] : []),
-                ...(this.local.length === this.localLimit ? [{ kind: 'more' as const, source: 'local' as const }] : []),
+                ...(this.localHasMore ? [{ kind: 'more' as const, source: 'local' as const }] : []),
             ];
         }
         if (node.kind === 'file' || node.kind === 'more') return [];

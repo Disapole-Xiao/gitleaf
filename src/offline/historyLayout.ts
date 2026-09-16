@@ -1,6 +1,7 @@
 import type { HistoryCommitNode, HistoryPosition } from './historyModel';
 import type { HistoryUpdate } from '../api/base';
 import { commitMessage } from './commitLabel';
+import { isHistoryNodeSynced } from './historyState';
 
 export interface GraphRow {
     id: string;
@@ -77,7 +78,7 @@ export function layoutHistory(nodes: HistoryCommitNode[], position: HistoryPosit
             hash: node.commit?.shortHash,
             pending: node.kind === 'local' && !!node.pending,
             combined: node.kind === 'remote' && !!node.commit,
-            synced: node.kind === 'remote' && (!!node.commit || position.baseVersion !== undefined && node.update.toV <= position.baseVersion),
+            synced: isHistoryNodeSynced(node, position),
         };
     });
     return { rows };

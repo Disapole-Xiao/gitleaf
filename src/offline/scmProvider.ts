@@ -114,7 +114,9 @@ export class OfflineScmProvider implements vscode.Disposable {
         this.historyModel = new HistoryModel(repository, remoteHistory, contentProvider,
             (commit, file) => this.historyFileResources(commit, file), action);
         this.fileDecorations = new GitLeafFileDecorations(repository.root);
-        this.disposables.push(history.bind(this.historyModel), this.fileDecorations);
+        this.disposables.push(this.historyModel.onDidChange(() => this.refreshSyncStatus()),
+            history.bind(this.historyModel), this.fileDecorations);
+        this.refreshSyncStatus();
         this.contentProvider.register(repository);
 
         const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(rootUri, '**/*'));
@@ -161,17 +163,23 @@ export class OfflineScmProvider implements vscode.Disposable {
         this.conflictsGroup.resourceStates = changes.filter(change => change.kind === 'conflict').map(change => toState(change));
         this.stagedGroup.resourceStates = ordinary.filter(change => ![' ', '?'].includes(change.x)).map(change => toState(slice(change, true), true));
         this.changesGroup.resourceStates = ordinary.filter(change => change.y !== ' ').map(change => toState(slice(change, false)));
-        const remote = await this.repository.divergence();
-        const summary = remote.known ? `${remote.behind}↓ ${remote.ahead}↑` : 'Remote not fetched';
-        this.sourceControl.statusBarCommands = [{
-            command: COMMANDS.SYNC_NOW, title: `$(sync) ${summary}`,
-            tooltip: 'Pull Overleaf changes, then push local commits if there are no conflicts.',
-        }];
         this.fileDecorations.refresh(changes, await this.repository.refreshIgnoreRules());
         await this.historyModel.refreshLocal();
         this.contentProvider.refresh(this.repository.root);
         this.sourceControl.count = changes.length;
         return changes;
+    }
+
+    private refreshSyncStatus(): void {
+        const state = this.historyModel.syncState();
+        const incoming = state.incoming === undefined ? '?' : `${state.incoming}${state.incomingComplete ? '' : '+'}`;
+        const outgoing = `${state.outgoing}${state.outgoingComplete ? '' : '+'}`;
+        const details = state.incoming === undefined ? 'Incoming history is not yet known.'
+            : `${state.incomingComplete ? '' : 'At least '}${state.incoming} incoming history entries.`;
+        this.sourceControl.statusBarCommands = [{
+            command: COMMANDS.SYNC_NOW, title: `$(sync) ${incoming}↓ ${outgoing}↑`,
+            tooltip: `${details} ${state.outgoingComplete ? '' : 'At least '}${state.outgoing} outgoing commits. Pull Overleaf changes, then push local commits if there are no conflicts.`,
+        }];
     }
 
     async openChange(change: WorkingChange, staged = false): Promise<void> {
