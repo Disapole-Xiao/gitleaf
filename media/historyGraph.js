@@ -18,6 +18,7 @@
     }
     function post(type, id, index) { vscode.postMessage({ type, id, index, session }); }
     function hideHover() { clearTimeout(hoverTimer); clearTimeout(hideTimer); hover.hidden = true; hoverOwner = undefined; }
+    function scheduleHideHover() { clearTimeout(hoverTimer); clearTimeout(hideTimer); hideTimer = setTimeout(hideHover, 180); }
     function position(popup, rect) {
         popup.hidden = false;
         popup.style.left = `${Math.max(4, Math.min(rect.left, innerWidth - popup.offsetWidth - 4))}px`;
@@ -227,8 +228,11 @@
                 button.append(badges);
             }
             button.addEventListener('click', () => toggle(row.id));
-            button.addEventListener('mouseenter', () => { clearTimeout(hideTimer); hoverTimer = setTimeout(() => showHover(row, button), 450); });
-            button.addEventListener('mouseleave', () => { clearTimeout(hoverTimer); hideTimer = setTimeout(hideHover, 180); });
+            button.addEventListener('mouseenter', () => {
+                clearTimeout(hoverTimer); clearTimeout(hideTimer);
+                if (hoverOwner !== button) hoverTimer = setTimeout(() => showHover(row, button), 450);
+            });
+            button.addEventListener('mouseleave', scheduleHideHover);
             button.addEventListener('contextmenu', event => showMenu(row, event, button));
             button.addEventListener('keydown', event => {
                 if (['ArrowLeft', 'ArrowRight'].includes(event.key)) { event.preventDefault(); toggle(row.id, event.key === 'ArrowRight'); }
@@ -251,6 +255,8 @@
         if (focused) [...graph.querySelectorAll('button')].find(button => button.dataset.key === focused)?.focus({ preventScroll: true });
         document.scrollingElement.scrollTop = scroll;
     }
+    hover.addEventListener('mouseenter', () => { clearTimeout(hoverTimer); clearTimeout(hideTimer); });
+    hover.addEventListener('mouseleave', scheduleHideHover);
     document.addEventListener('pointerdown', event => { if (!menu.contains(event.target)) menu.hidden = true; });
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape') { menu.hidden = true; hideHover(); }

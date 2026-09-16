@@ -61,12 +61,12 @@ footer { padding: 3px 10px; }
 .more:hover:not(:disabled) { color: var(--vscode-textLink-foreground); }
 .more:disabled { opacity: .5; cursor: wait; }
 #hover, #menu { position: fixed; z-index: 10; box-sizing: border-box; border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-panel-border)); border-radius: 5px; background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background)); color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground)); box-shadow: 0 3px 12px var(--vscode-widget-shadow, #0005); }
-#hover { width: min(350px, calc(100vw - 8px)); max-height: calc(100vh - 8px); overflow: auto; font-size: 12px; pointer-events: none; }
+#hover { width: min(350px, calc(100vw - 8px)); max-height: calc(100vh - 8px); overflow: auto; overscroll-behavior: contain; font-size: 12px; }
 .hover-heading { display: flex; align-items: center; gap: 7px; padding: 10px 12px 0; }
 .hover-heading strong { color: var(--vscode-textLink-foreground); font-weight: 600; }
 .avatar { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); font-size: 11px; }
 .hover-date { padding: 3px 12px 0 40px; color: var(--vscode-descriptionForeground); font-size: 11px; }
-.hover-message { padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.hover-message { margin: 10px 0; padding: 0 12px; max-height: 4.2em; line-height: 1.4; overflow-y: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; }
 .hover-stats { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-top: 1px solid var(--vscode-panel-border); }
 .hover-labels { padding: 0 12px 9px; display: flex; gap: 5px; flex-wrap: wrap; }
 .hover-labels .tag { overflow-wrap: anywhere; }
