@@ -2,7 +2,7 @@
   "name": "gitleaf",
   "displayName": "GitLeaf",
   "description": "Online collaboration and Git-style offline workflows for Overleaf projects",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publisher": "DisapoleXiao",
   "repository": {
     "type": "git",

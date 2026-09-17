@@ -226,12 +226,6 @@
             }
             if (row.pending) content.append(el('span', 'pending', '◷'));
             button.append(content);
-            if (comparison?.id === row.id) {
-                const marker = el('span', 'compare-marker', '⇄');
-                marker.title = 'Selected for Compare';
-                marker.setAttribute('aria-label', 'Selected for Compare');
-                button.append(marker);
-            }
             if (row.pointers.length) {
                 const badges = el('span', 'commit-pointers');
                 const folded = row.pointers.includes('LOCAL') && row.pointers.includes('REMOTE');
