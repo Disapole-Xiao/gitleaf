@@ -43,13 +43,14 @@ Common actions:
 
 If Pull encounters a conflict, choose which version to keep under **Merge Changes** or edit the file manually. If you are not ready to resolve it, run **GitLeaf: Abort Pull** to cancel that pull.
 
-## View history
+## View and manage history
 
-- Open **GitLeaf Graph** in Source Control. Use the button on the right of a history record to view the diffs for all changed files.
-- Click a record to expand its changed files, then click a file to view its individual diff.
-- To compare two history versions, right-click one and choose **Select for Compare**, then right-click another and choose **Compare with Selected** to view diffs for all files changed between them. Local commits and Overleaf versions can be compared in any combination.
-- Right-click a remote record to **Restore** or **Label** a version and sync that action to Overleaf.
-- Right-click an unpublished local record to undo commits with **Revert Soft** or **Revert Hard**. Soft keeps the changes from the removed commits; Hard discards those changes, but is unavailable while you have uncommitted changes.
+Open **GitLeaf Graph** in Source Control:
+
+- **Compare a version with its predecessor**: click the icon on the right of a history record to view diffs for all files changed since the previous version. Click the record to expand its changed files, then click a file to view its individual diff.
+- **Compare two history versions**: right-click one version and choose `Select for Compare`, then right-click another and choose `Compare with Selected` to view diffs for all files changed between them.
+- **Restore and label**: right-click a remote history record to `restore` or `label` a version and sync that action to the Overleaf project.
+- **Undo local commits**: right-click an unpublished local history record to undo commits with `revert soft/hard`. `soft` keeps the changes from the removed commits; `hard` discards those changes, but is unavailable while you have uncommitted changes.
 
 # Install and use the CLI
 
