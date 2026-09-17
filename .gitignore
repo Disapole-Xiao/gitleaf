@@ -34,6 +34,7 @@ test-results/
 
 # Documentation drafts stay local; READMEs and published release notes are public
 /docs/
+/AGENTS.md
 
 # Editor and OS scratch files
 .cache/
