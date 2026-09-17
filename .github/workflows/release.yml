@@ -1,0 +1,125 @@
+name: Check, package and release
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VSCE_VERSION: '4.0.0'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      publish: ${{ steps.release.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Validate version and release notes
+        id: release
+        run: node .github/scripts/release.cjs prepare
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            target: win32-x64
+          - os: ubuntu-22.04
+            target: linux-x64
+          - os: macos-15-intel
+            target: darwin-x64
+          - os: macos-15
+            target: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      TARGET: ${{ matrix.target }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npx --no-install eslint .github/scripts --ext cjs --no-ignore
+      - name: Check native module and CLI startup
+        run: |
+          node -e "require('node:assert/strict').equal(process.platform + '-' + process.arch, process.env.TARGET); require('@napi-rs/keyring');"
+          node out/cli.js --version
+      - name: Package and inspect VSIX
+        run: |
+          mkdir -p artifacts
+          npx --yes "@vscode/vsce@$VSCE_VERSION" package --target "$TARGET" --out "artifacts/gitleaf-$VERSION-$TARGET.vsix"
+          node .github/scripts/verify-vsix.cjs "artifacts/gitleaf-$VERSION-$TARGET.vsix" "$TARGET"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vsix-${{ matrix.target }}
+          path: artifacts/*.vsix
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [prepare, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-22.04
+    environment: marketplace
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      AZURE_CORE_OUTPUT: none
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: vsix-*
+          path: artifacts
+          merge-multiple: true
+      - name: Sign in with Microsoft Entra federation
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+      - name: Show Marketplace member ID for initial setup
+        run: az rest --url https://app.vssps.visualstudio.com/_apis/profile/profiles/me --resource 499b84ac-1321-427f-aa17-267ca6975798 --query id --output tsv
+      - name: Verify Marketplace identity
+        run: npx --yes "@vscode/vsce@$VSCE_VERSION" verify-pat DisapoleXiao --azure-credential
+      - name: Publish GitHub Release first
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/release.cjs github-release
+      - name: Publish the released packages to Marketplace
+        run: npx --yes "@vscode/vsce@$VSCE_VERSION" publish --packagePath published/*.vsix --azure-credential --skip-duplicate
