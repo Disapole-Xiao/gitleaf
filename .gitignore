@@ -25,14 +25,16 @@ coverage/
 # Tests are retained locally but excluded from the first public source release
 /src/test/
 /scripts/test-*.cjs
-/docs/IMPLEMENTATION.zh-CN.md
-/docs/sync-contract.md
 test-workspace/
 .vscode-test/
 .playwright-cli/
 playwright-report/
 test-results/
 .research/
+
+# Documentation drafts stay local; only the READMEs are public for now
+/docs/
+/CHANGELOG.md
 
 # Editor and OS scratch files
 .cache/

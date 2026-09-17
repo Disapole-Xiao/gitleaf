@@ -49,13 +49,14 @@ If Pull encounters a conflict, choose which version to keep under **Merge Change
 - Right-click a remote record to **Restore** or **Label** a version and sync that action to Overleaf.
 - Right-click an unpublished local record to undo commits with **Revert Soft** or **Revert Hard**. Soft keeps the changes from the removed commits; Hard discards those changes, but is unavailable while you have uncommitted changes.
 
-## Install and use the CLI
+# Install and use the CLI
 
+Use the CLI to let your agent commit changes directly.
 The CLI and VS Code share your login, linked folders, staged changes, and commits when run on the same machine under the same OS user. The CLI also works with VS Code closed.
 
-### Install
+## Install
 
-1. Install the GitLeaf extension for your platform, Node.js 22.9 or newer, and Git. Make sure `node`, `git`, and `code` work in your terminal. On macOS, if `code` is missing, run **Shell Command: Install 'code' command in PATH** from the VS Code Command Palette.
+1. Install the GitLeaf extension for your platform, Node.js 22.9 or newer, and Git. Make sure `node`, `git`, and `code` work in your terminal. On macOS, if `code` is missing, run `Shell Command: Install 'code' command in PATH` from the VS Code Command Palette.
 2. Run the installer once. No administrator privileges or separate npm package are needed.
 
    **Windows PowerShell:**
@@ -73,11 +74,11 @@ The CLI and VS Code share your login, linked folders, staged changes, and commit
 
 3. Fully quit and reopen your terminal, then run `gitleaf --version` to check. For an integrated terminal or agent, restart its host application too.
 
-### Log in and link a project
+## Log in and link a project
 
 - **Already logged in and linked a project in VS Code?** Open that folder in your terminal. There is no need to log in or link it again.
-- CLI project operations use **Offline** mode. If the project is Online, first run **GitLeaf: Change Sync Mode** in VS Code.
-- You can also start from the CLI. Replace the cookie below with your browser cookie and `PROJECT_ID` with an ID returned by `gitleaf projects`. Linking downloads the project in Offline mode.
+- **CLI project operations require Offline mode.** If the project is Online, first run `GitLeaf: Change Sync Mode` in VS Code.
+- **You can also log in and link a project from the CLI.** Replace the cookie below with your browser cookie and `PROJECT_ID` with an ID returned by `gitleaf projects`. Linking downloads the project in Offline mode.
 
 ```bash
 gitleaf auth login --cookie "YOUR_OVERLEAF_COOKIE"
@@ -87,9 +88,7 @@ cd my-paper
 gitleaf link --project PROJECT_ID
 ```
 
-Your cookie is a login credential: never share it or commit it to a repository. The command above may remain in your shell history. Prefer signing in through VS Code, or use `--cookie-stdin` as described in the [detailed guide (Chinese)](docs/CLI.zh-CN.md#安装与登录).
-
-### Daily workflow
+## Basic commands
 
 After editing and saving files in your linked folder:
 
@@ -103,11 +102,7 @@ gitleaf pull
 gitleaf push
 ```
 
-- `add main.tex` stages one file; `add --all` stages all changes. Commit only includes staged changes; Push only uploads committed changes.
-- Commit or stash (`gitleaf stash save`) before Pull. Resolve any conflicts before Push; see [conflict handling (Chinese)](docs/CLI.zh-CN.md#撤回stash冲突).
-- `gitleaf fetch` checks remote updates without changing working files; `gitleaf history` shows history.
-- To work without changing directories, use `gitleaf -C "/path/to/linked-folder" status`. Scripts and agents can use `gitleaf status --json`.
-- Run `gitleaf --help` for more commands. For other shells, uninstallation, and installation troubleshooting, see the [CLI installation guide (Chinese)](docs/CLI-install.zh-CN.md).
+More commands: `gitleaf --help`.
 
 ## Acknowledgements
 

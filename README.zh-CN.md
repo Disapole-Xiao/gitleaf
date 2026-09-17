@@ -49,13 +49,14 @@ GitLeaf 与 Overleaf 没有隶属或官方合作关系。
 - 右键点击远程历史记录，可以执行 `restore` 和 `label` 操作，并同步到 overleaf 项目。
 - 右键点击未推送的本地历史，可以撤销提交（`revert soft/hard`）。`soft` 会保留被撤销提交中的修改；`hard` 会丢弃这些修改，但有未提交修改时不能执行。
 
-## 使用和安装 CLI
+# 使用和安装 CLI
 
+使用 CLI 可以让你的 agent 直接提交修改。
 CLI 与 VS Code 界面共用登录、关联文件夹、暂存区和提交记录（需在同一台机器、同一系统用户下使用）。关闭 VS Code 后也能操作。
 
-### 安装
+## 安装
 
-1. 安装适合当前系统的 GitLeaf 插件、Node.js 22.9 或更新版本，以及 Git。确认终端能运行 `node`、`git` 和 `code`。macOS 若找不到 `code`，在 VS Code 命令面板运行 **Shell Command: Install 'code' command in PATH**。
+1. 安装适合当前系统的 GitLeaf 插件、Node.js 22.9 或更新版本，以及 Git。确认终端能运行 `node`、`git` 和 `code`。macOS 若找不到 `code`，在 VS Code 命令面板运行 `Shell Command: Install 'code' command in PATH`。
 2. 运行一次下面的安装命令，无需管理员权限，也不用另外安装 npm 包。
 
    **Windows PowerShell：**
@@ -73,11 +74,11 @@ CLI 与 VS Code 界面共用登录、关联文件夹、暂存区和提交记录�
 
 3. 完全退出并重新打开终端，再运行 `gitleaf --version` 验证。若使用 VS Code 内置终端或 agent，也重启其所在应用。
 
-### 登录与关联
+## 登录与关联
 
 - **已在 VS Code 中登录、关联过项目？** 直接进入该文件夹，无需重复登录或 Link。
-- CLI 项目操作使用 **Offline** 模式。若项目处于 Online，先在 VS Code 运行 **GitLeaf: Change Sync Mode** 切换。
-- 也可以从 CLI 开始。下面的 Cookie 换成浏览器 Cookie，`PROJECT_ID` 换成 `gitleaf projects` 列出的项目 ID；`link` 会以 Offline 模式关联并下载项目。
+- **CLI 项目操作需要使用 Offline 模式**。若项目处于 Online，先在 VS Code 运行 `GitLeaf: Change Sync Mode` 切换。
+- **也可以从 CLI 登录和关联**。下面的 Cookie 换成浏览器 Cookie，`PROJECT_ID` 换成 `gitleaf projects` 列出的项目 ID。`link` 会以 Offline 模式关联并下载项目。
 
 ```bash
 gitleaf auth login --cookie "YOUR_OVERLEAF_COOKIE"
@@ -87,9 +88,7 @@ cd my-paper
 gitleaf link --project PROJECT_ID
 ```
 
-Cookie 是登录凭据，不要分享或提交到仓库。上述写法可能保留在终端历史中；可优先使用 VS Code 登录，或按[详细说明](docs/CLI.zh-CN.md#安装与登录)使用 `--cookie-stdin`。
-
-### 日常使用
+## 基本命令
 
 在关联文件夹中编辑并保存后：
 
@@ -103,11 +102,7 @@ gitleaf pull
 gitleaf push
 ```
 
-- `add main.tex` 暂存指定文件；`add --all` 暂存全部修改；`commit` 只提交已暂存内容，`push` 只上传已提交内容。
-- Pull 前先提交或暂存工作进度（`gitleaf stash save`）；遇到冲突时先解决，再 Push。具体操作见[冲突处理说明](docs/CLI.zh-CN.md#撤回stash冲突)。
-- `gitleaf fetch` 只检查远程更新，不修改工作文件；`gitleaf history` 查看历史。
-- 不想切换目录？用 `gitleaf -C "你的关联文件夹" status`。脚本或 agent 可用 `gitleaf status --json`。
-- 更多命令：`gitleaf --help`。其他终端、卸载和安装问题见[CLI 安装说明](docs/CLI-install.zh-CN.md)。
+更多命令：`gitleaf --help`。
 
 ## 致谢
 
