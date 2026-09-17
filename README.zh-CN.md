@@ -43,13 +43,13 @@ GitLeaf 与 Overleaf 没有隶属或官方合作关系。
 
 如果 Pull 遇到冲突，在 **Merge Changes** 中选择要保留的版本或手动修改。还没准备好解决时，可运行 **GitLeaf: Abort Pull** 撤销这次拉取。
 
-## 查看历史
+## 查看与管理历史版本
 
-- 打开源代码管理中的 **GitLeaf Graph**，点击历史记录右侧按钮可以查看全部文件差异
-- 点击历史记录展开改动文件，点击文件查看单文件差异。
-- 比较两个历史版本：右键一个版本选择 **Select for Compare**，再右键另一个版本选择 **Compare with Selected**，即可查看两个版本间全部改动文件的差异。支持本地提交与 Overleaf 版本的任意组合。
-- 右键点击远程历史记录，可以执行 `restore` 和 `label` 操作，并同步到 overleaf 项目。
-- 右键点击未推送的本地历史，可以撤销提交（`revert soft/hard`）。`soft` 会保留被撤销提交中的修改；`hard` 会丢弃这些修改，但有未提交修改时不能执行。
+打开源代码管理中的 **GitLeaf Graph**：
+- **查看某版本与上一版本差异**：点击历史记录右侧图标可以查看该版本相对于上一版本全部文件差异；点击历史记录展开改动文件，点击文件查看单文件差异。
+- **比较两个历史版本**：右键一个版本选择 `Select for Compare`，再右键另一个版本选择 `Compare with Selected`，即可查看两个版本间全部改动文件的差异。
+- **restore 与 label**：右键点击远程历史记录，可以执行 `restore` 和 `label` 操作，并同步到 overleaf 项目。
+- **撤销本地提交**：右键点击未推送的本地历史，可以撤销提交（`revert soft/hard`）。`soft` 会保留被撤销提交中的修改；`hard` 会丢弃这些修改，但有未提交修改时不能执行。
 
 # 使用和安装 CLI
 
@@ -65,13 +65,8 @@ CLI 与 VS Code 界面共用登录、关联文件夹、暂存区和提交记录�
 
    ```powershell
    $extensionPath = code --locate-extension disapolexiao.gitleaf
-   if ($LASTEXITCODE -eq 0 -and $extensionPath) {
-       node (Join-Path $extensionPath.Trim() "scripts/install-cli.cjs")
-   } else {
-       Write-Error "未找到 GitLeaf，请先在当前 VS Code 中安装插件。"
-   }
+   node (Join-Path $extensionPath.Trim() "scripts/install-cli.cjs")
    ```
-
    **macOS / Linux（Bash、Zsh）：**
 
    ```bash

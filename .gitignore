@@ -32,9 +32,8 @@ playwright-report/
 test-results/
 .research/
 
-# Documentation drafts stay local; only the READMEs are public for now
+# Documentation drafts stay local; READMEs and published release notes are public
 /docs/
-/CHANGELOG.md
 
 # Editor and OS scratch files
 .cache/

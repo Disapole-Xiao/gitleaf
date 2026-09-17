@@ -5,7 +5,6 @@
 output/**
 .github/**
 docs/**
-CHANGELOG.md
 src/**
 patches/**
 dist/**
