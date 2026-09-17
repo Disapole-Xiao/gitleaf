@@ -373,7 +373,7 @@ export class GitRepository {
         if (!remote) throw new Error('No Overleaf tracking commit exists.');
         // Only unpublished commits are replayed; public server history is never
         // rewritten. Git supplies the three-way merge and conflict machinery.
-        const result = await this.run(['rebase', remote], { allowFailure: true, env: { GIT_EDITOR: 'true' } });
+        const result = await this.run(['rebase', '--autostash', remote], { allowFailure: true, env: { GIT_EDITOR: 'true' } });
         const changes = await this.status();
         if (result.exitCode !== 0 && !changes.some(change => change.kind === 'conflict')) {
             throw new Error(result.stderr.toString('utf8').trim() || 'Git pull rebase failed.');
@@ -459,8 +459,10 @@ export class GitRepository {
     async resolve(pathValue: string, strategy: 'local' | 'overleaf' | 'manual'): Promise<void> {
         const relative = validateRelativePath(pathValue);
         if (strategy !== 'manual') {
-            const rebasing = await this.isRebasing();
-            const ours = rebasing ? strategy === 'overleaf' : strategy === 'local';
+            // Both rebase and its final autostash application put the local
+            // changes on "theirs"; the latter no longer has rebase metadata.
+            const pulling = await this.isRebasing() || !!(await this.publications.read()).pendingPull;
+            const ours = pulling ? strategy === 'overleaf' : strategy === 'local';
             await this.run(['checkout', ours ? '--ours' : '--theirs', '--', relative]);
         } else {
             const file = await fs.readFile(path.join(this.root, relative), 'utf8');

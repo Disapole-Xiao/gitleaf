@@ -137,13 +137,7 @@ export class GitLeafProject {
                         if (!credential) throw new OperationBlockedError('Log in to Overleaf first.');
                         await this.repository.setAuthor(credential.userName, credential.userEmail);
                         const commit = await this.repository.commit(message);
-                        const receipts = await this.repository.publications.read();
-                        if (receipts.pendingPull && !(await this.repository.isRebasing())
-                            && await this.repository.isAncestorOfHead(receipts.pendingPull.gitHash)) {
-                            receipts.integrated = receipts.pendingPull;
-                            delete receipts.pendingPull;
-                            await this.repository.publications.write(receipts);
-                        }
+                        await this.recordPullProgress();
                         return { commit: commit || null };
                     }
                     case 'pull':
@@ -213,8 +207,13 @@ export class GitLeafProject {
                     }
                     case 'resolve':
                         await this.repository.resolve(command.path, command.strategy);
+                        await this.recordPullProgress();
                         return { resolved: command.path };
                     case 'abortPull': {
+                        if (!(await this.repository.isRebasing()))
+                            throw new OperationBlockedError(
+                                'No rebase is in progress. Resolve any conflicts from restoring local changes; their backup is in Stashes.',
+                            );
                         if (
                             !(await this.confirm(
                                 'Abort the current pull and restore the pre-pull files?',
@@ -308,10 +307,11 @@ export class GitLeafProject {
             await this.clone();
             return { conflicts: [] };
         }
+        if (await this.repository.isRebasing())
+            throw new OperationBlockedError('Finish or abort the current pull before pulling again.');
         const current = await this.repository.status();
         if (current.some((change) => change.kind === 'conflict'))
-            throw new OperationBlockedError('Resolve or abort the current conflict before pulling.');
-        if (current.length) throw new OperationBlockedError('Commit or stash your local changes before pulling.');
+            throw new OperationBlockedError('Resolve the current conflicts before pulling.');
         await this.checkEditors();
         const conflicts = await this.withRemote(async (remote) => {
             const beforeV = await this.history.currentVersion(true);
@@ -334,16 +334,23 @@ export class GitLeafProject {
                 throw error;
             }
             const conflicts = changes.filter((change) => change.kind === 'conflict');
-            if (!conflicts.length) {
-                receipts.integrated = receipts.pendingPull;
-                delete receipts.pendingPull;
-                delete receipts.pending;
-                await this.repository.publications.write(receipts);
-            }
+            await this.recordPullProgress();
             return conflicts.map((change) => change.path);
         });
         await this.store.updateLastSynced();
         return { conflicts };
+    }
+    private async recordPullProgress(): Promise<void> {
+        const receipts = await this.repository.publications.read();
+        if (!receipts.pendingPull || await this.repository.isRebasing()
+            || !(await this.repository.isAncestorOfHead(receipts.pendingPull.gitHash))) return;
+        // Rebase may finish while restoring the autostash leaves conflicts.
+        // The remote is integrated, but keep the pull context for resolution.
+        receipts.integrated = receipts.pendingPull;
+        if (!(await this.repository.status()).some(change => change.kind === 'conflict'))
+            delete receipts.pendingPull;
+        delete receipts.pending;
+        await this.repository.publications.write(receipts);
     }
     private async prepareOnline(): Promise<void> {
         await this.repository.initialize();
