@@ -2,6 +2,23 @@
 
 Only versions released on the Visual Studio Marketplace are listed here.
 
+## 1.1.0 — 2026-09-17
+
+### New Features
+
+- Compare any two local or remote history versions in GitLeaf Graph.
+- Allow Offline pulls with uncommitted tracked-file changes by automatically stashing and restoring them.
+
+### Fixes
+
+- Keep repository incoming and outgoing counts consistent with GitLeaf Graph. Show `N+` when history is only partially loaded.
+- Fix CLI extension discovery when the publisher ID uses mixed capitalization.
+- Improve history hover behavior, long-message scrolling, and version badge placement.
+
+### Docs
+
+- Expand the English and Chinese guides for CLI installation, usage, and history management.
+
 ## 1.0.3 — 2026-09-14
 
 - First public release, for Windows x64.
