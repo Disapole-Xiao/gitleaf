@@ -215,14 +215,9 @@
             button.dataset.key = row.id; button.setAttribute('aria-expanded', String(expanded.has(row.id)));
             button.append(rail(row, records[index - 1]));
             const content = el('span', 'commit-content');
-            if (row.label) {
-                content.append(el('span', 'subject', row.label));
-                if (row.author) content.append(el('span', 'author', row.author));
-                if (row.version !== undefined) content.append(el('span', 'version', `v${row.version}`));
-            } else {
-                if (row.version !== undefined) content.append(el('span', 'version', `v${row.version}`));
-                if (row.author) content.append(el('span', 'author', row.author));
-            }
+            if (row.version !== undefined) content.append(el('span', 'version', `v${row.version}`));
+            if (row.label) content.append(el('span', 'subject', row.label));
+            if (row.author) content.append(el('span', 'author', row.author));
             if (row.pending) content.append(el('span', 'pending', '◷'));
             button.append(content);
             if (row.pointers.length) {

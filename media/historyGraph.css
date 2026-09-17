@@ -38,7 +38,7 @@ button:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-fo
 .version, .tag { flex-shrink: 0; font-size: 11px; padding: 0 5px; line-height: 17px; border-radius: 4px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 .version { font-variant-numeric: tabular-nums; padding: 0 6px; line-height: 17px; border-radius: 999px; background: transparent; color: var(--vscode-descriptionForeground); border: 1px solid var(--vscode-descriptionForeground); box-shadow: none; text-shadow: none; }
 .commit-content .version { display: inline-block; vertical-align: middle; }
-.commit-content .version:not(:first-child), .author, .pending { margin-left: 4px; }
+.commit-content > :not(:first-child) { margin-left: 4px; }
 .filename { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .author { color: var(--vscode-descriptionForeground); font-size: 11px; }
 .pending { color: var(--vscode-editorWarning-foreground); }
