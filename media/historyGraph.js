@@ -55,7 +55,6 @@
         const actions = [];
         if (comparison && comparison.id !== row.id) actions.push(['compare', 'Compare with Selected']);
         actions.push(['selectCompare', 'Select for Compare']);
-        if (comparison) actions.push(['clearCompare', 'Clear Compare Selection']);
         actions.push(['label', 'Label…']);
         if (row.kind === 'remote') actions.push(['restore', 'Restore and Sync…']);
         else if (!row.pending) actions.push(['soft', 'Revert · Soft…'], ['hard', 'Revert · Hard…']);

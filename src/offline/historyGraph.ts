@@ -146,8 +146,8 @@ export class HistoryGraph implements vscode.WebviewViewProvider, vscode.Disposab
             if (typeof id !== 'string') return;
             const record = this.records.get(id);
             if (!record) return;
-            if (type === 'selectCompare' || type === 'clearCompare') {
-                this.compareBase = type === 'selectCompare' ? record : undefined;
+            if (type === 'selectCompare') {
+                this.compareBase = record;
                 await this.view?.webview.postMessage({ type: 'comparison', session, comparison: this.comparisonSelection() });
                 return;
             }
