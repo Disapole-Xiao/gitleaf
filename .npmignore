@@ -1,8 +1,8 @@
 /*
+!/CHANGELOG.md
 !/out/
 !/patches/
 !/images/
-!/docs/
 !/scripts/
 /scripts/test-*.cjs
 /out/test/
