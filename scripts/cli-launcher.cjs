@@ -8,7 +8,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const extensionId = 'DisapoleXiao.gitleaf';
+// VS Code's locator expects the normalized ID returned by --list-extensions.
+const extensionId = 'disapolexiao.gitleaf';
 const manifestName = '.gitleaf-cli-install.json';
 
 function locateExtension(code) {
@@ -23,7 +24,7 @@ function locateExtension(code) {
         env.GITLEAF_CODE_COMMAND = code;
         args = ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
             '$ErrorActionPreference = "Stop"; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ' +
-            '& $env:GITLEAF_CODE_COMMAND --locate-extension DisapoleXiao.gitleaf; exit $LASTEXITCODE'];
+            `& $env:GITLEAF_CODE_COMMAND --locate-extension ${extensionId}; exit $LASTEXITCODE`];
     }
     const result = spawnSync(command, args, {
         encoding: 'utf8', env, windowsHide: true, timeout: 20000,
@@ -37,7 +38,7 @@ function locateExtension(code) {
         throw new Error('VS Code did not return a GitLeaf extension directory. Install the extension first.');
     }
     const metadata = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'));
-    if (`${metadata.publisher}.${metadata.name}` !== extensionId) throw new Error('Unexpected extension identity.');
+    if (`${metadata.publisher}.${metadata.name}`.toLowerCase() !== extensionId) throw new Error('Unexpected extension identity.');
     const cli = path.join(directory, 'out', 'cli.js');
     if (!fs.statSync(cli).isFile()) throw new Error('The installed extension does not contain the CLI.');
     return cli;

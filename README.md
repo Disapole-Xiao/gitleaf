@@ -2,6 +2,8 @@
 
 [简体中文](README.zh-CN.md)
 
+> GitLeaf is under development and testing. It has only been tested on Windows; macOS and Linux have not yet been verified. Bug reports and suggestions are welcome via [Issues](https://github.com/Disapole-Xiao/gitleaf/issues).
+
 Use Overleaf in VS Code: link an Overleaf project to a local folder, then choose a Git-style offline workflow or edit with collaborators in real time.
 
 GitLeaf is not affiliated with or endorsed by Overleaf.
@@ -45,7 +47,7 @@ If Pull encounters a conflict, choose which version to keep under **Merge Change
 
 - Open **GitLeaf Graph** in Source Control. Use the button on the right of a history record to view the diffs for all changed files.
 - Click a record to expand its changed files, then click a file to view its individual diff.
-- To compare two versions, right-click the first and choose **Select for Compare**, then right-click the second and choose **Compare with Selected**. The selected version is on the left. Local commits and Overleaf versions can be compared in any combination, without changing your working files. Binary changes show size and content summaries.
+- To compare two history versions, right-click one and choose **Select for Compare**, then right-click another and choose **Compare with Selected** to view diffs for all files changed between them. Local commits and Overleaf versions can be compared in any combination.
 - Right-click a remote record to **Restore** or **Label** a version and sync that action to Overleaf.
 - Right-click an unpublished local record to undo commits with **Revert Soft** or **Revert Hard**. Soft keeps the changes from the removed commits; Hard discards those changes, but is unavailable while you have uncommitted changes.
 
@@ -62,14 +64,18 @@ The CLI and VS Code share your login, linked folders, staged changes, and commit
    **Windows PowerShell:**
 
    ```powershell
-   $extensionPath = (code --locate-extension DisapoleXiao.gitleaf).Trim()
-   node "$extensionPath/scripts/install-cli.cjs"
+   $extensionPath = code --locate-extension disapolexiao.gitleaf
+   if ($LASTEXITCODE -eq 0 -and $extensionPath) {
+       node (Join-Path $extensionPath.Trim() "scripts/install-cli.cjs")
+   } else {
+       Write-Error "GitLeaf was not found. Install it in this VS Code first."
+   }
    ```
 
    **macOS / Linux (Bash, Zsh):**
 
    ```bash
-   node "$(code --locate-extension DisapoleXiao.gitleaf)/scripts/install-cli.cjs"
+   node "$(code --locate-extension disapolexiao.gitleaf)/scripts/install-cli.cjs"
    ```
 
 3. Fully quit and reopen your terminal, then run `gitleaf --version` to check. For an integrated terminal or agent, restart its host application too.

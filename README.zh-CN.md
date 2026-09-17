@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+> GitLeaf 当前处于开发测试阶段，仅在 Windows 上测试过，macOS 和 Linux 尚未验证。欢迎通过 [Issues](https://github.com/Disapole-Xiao/gitleaf/issues) 反馈问题和建议。
+
 在 VS Code 中使用 Overleaf：将一个 Overleaf 项目关联到你选定的本地文件夹，可以选择类似 Git 的离线工作流，也可以与协作者实时编辑。
 
 GitLeaf 与 Overleaf 没有隶属或官方合作关系。
@@ -45,7 +47,7 @@ GitLeaf 与 Overleaf 没有隶属或官方合作关系。
 
 - 打开源代码管理中的 **GitLeaf Graph**，点击历史记录右侧按钮可以查看全部文件差异
 - 点击历史记录展开改动文件，点击文件查看单文件差异。
-- 比较两个版本：右键第一个版本选择 **Select for Compare**，再右键第二个版本选择 **Compare with Selected**。先选中的版本在左侧；支持本地提交与 Overleaf 版本任意组合，不改动当前工作文件。二进制文件显示大小及内容变化摘要。
+- 比较两个历史版本：右键一个版本选择 **Select for Compare**，再右键另一个版本选择 **Compare with Selected**，即可查看两个版本间全部改动文件的差异。支持本地提交与 Overleaf 版本的任意组合。
 - 右键点击远程历史记录，可以执行 `restore` 和 `label` 操作，并同步到 overleaf 项目。
 - 右键点击未推送的本地历史，可以撤销提交（`revert soft/hard`）。`soft` 会保留被撤销提交中的修改；`hard` 会丢弃这些修改，但有未提交修改时不能执行。
 
@@ -62,14 +64,18 @@ CLI 与 VS Code 界面共用登录、关联文件夹、暂存区和提交记录�
    **Windows PowerShell：**
 
    ```powershell
-   $extensionPath = (code --locate-extension DisapoleXiao.gitleaf).Trim()
-   node "$extensionPath/scripts/install-cli.cjs"
+   $extensionPath = code --locate-extension disapolexiao.gitleaf
+   if ($LASTEXITCODE -eq 0 -and $extensionPath) {
+       node (Join-Path $extensionPath.Trim() "scripts/install-cli.cjs")
+   } else {
+       Write-Error "未找到 GitLeaf，请先在当前 VS Code 中安装插件。"
+   }
    ```
 
    **macOS / Linux（Bash、Zsh）：**
 
    ```bash
-   node "$(code --locate-extension DisapoleXiao.gitleaf)/scripts/install-cli.cjs"
+   node "$(code --locate-extension disapolexiao.gitleaf)/scripts/install-cli.cjs"
    ```
 
 3. 完全退出并重新打开终端，再运行 `gitleaf --version` 验证。若使用 VS Code 内置终端或 agent，也重启其所在应用。
