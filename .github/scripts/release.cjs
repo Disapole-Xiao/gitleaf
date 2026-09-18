@@ -19,7 +19,7 @@ function releaseNotes(changelog, version) {
     assert.equal(matches.length, 1, `CHANGELOG.md must contain exactly one "## ${version}" section reviewed by the user.`);
     const section = matches[0];
     const next = sections[sections.indexOf(section) + 1];
-    const body = changelog.slice(section.index + section[0].length, next?.index).trim();
+    const body = changelog.slice(section.index + section[0].length, next?.index).replace(/\r\n/g, '\n').trim();
     assert.match(body, /^[-*] +\S.+/m, `CHANGELOG ${version} must describe the changes, not just the version.`);
     return body;
 }
@@ -90,7 +90,7 @@ function publishGitHubRelease(run = gh, query = args => spawnSync('gh', args, { 
     let release;
     if (lookup.status === 0) {
         release = JSON.parse(lookup.stdout);
-        assert.equal(release.body.trim(), notes, 'Existing release notes differ; refusing to overwrite a release.');
+        assert.equal(release.body.replace(/\r\n/g, '\n').trim(), notes, 'Existing release notes differ; refusing to overwrite a release.');
         assert.equal(release.prerelease, false, 'Expected a stable release.');
         if (release.draft) {
             assert.equal(release.target_commitish, sha, 'Existing draft belongs to another commit.');
