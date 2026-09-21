@@ -486,6 +486,9 @@ export class RemoteProject {
     }
 
     protected async replaceRemoteFile(entry: FileTreeEntry, content: Uint8Array): Promise<void> {
+        // Socket rename/move acknowledgements mutate the live tree entry while
+        // HTTP requests are pending. Keep the upload and rollback target stable.
+        entry = { ...entry };
         if (!entry.parentId) {
             throw new Error(`Replace ${entry.path}: parent folder is unknown`);
         }
@@ -499,8 +502,8 @@ export class RemoteProject {
 
         this.baseContent.set(entry.path, content);
         try {
-            // Overleaf rejects duplicate names. Move the original aside first,
-            // then keep it as a rollback copy until the replacement is tracked.
+            // Move the original aside and keep it as a rollback copy until
+            // the replacement is tracked.
             await this.renameRemoteEntry(entry, temporaryName, `Prepare replacement for ${entry.path}`);
             renamedOriginal = true;
 
