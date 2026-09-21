@@ -6,7 +6,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import * as stream from 'stream';
-import fetch from 'node-fetch';
+import fetch, { type Response } from 'node-fetch';
 import type { Identity } from '../core/credentials';
 import { HistoryRequestError, historyRetryAt, historyResponseDiagnostic } from './historyRequest';
 
@@ -413,30 +413,49 @@ export class BaseAPI {
             throw new Error('Not authenticated');
         }
 
-        const content: Buffer[] = [];
-
-        while (true) {
-            const res = await fetch(this.url + route, {
-                method: 'GET',
-                redirect: 'manual',
-                agent: this.agent,
-                headers: {
-                    'Connection': 'keep-alive',
-                    'Cookie': this.identity.cookies,
-                },
-            });
-
-            if (res.status === 200) {
-                content.push(await res.buffer());
-                break;
-            } else if (res.status === 206) {
-                content.push(await res.buffer());
-            } else {
-                break;
+        // Retry the complete GET, including body consumption: fetch() resolves
+        // before the file has arrived, so a reset can still occur in buffer().
+        for (let attempt = 0; ; attempt++) {
+            const controller = new AbortController();
+            let timedOut = false;
+            const timer = setTimeout(() => {
+                timedOut = true;
+                controller.abort();
+            }, 60000);
+            let res: Response | undefined;
+            try {
+                res = await fetch(this.url + route, {
+                    method: 'GET',
+                    redirect: 'manual',
+                    agent: this.agent,
+                    signal: controller.signal,
+                    headers: {
+                        'Connection': 'keep-alive',
+                        'Cookie': this.identity.cookies,
+                    },
+                });
+                if (res.status === 401 || res.status === 403 || res.status === 302) {
+                    throw new Error(`Session expired or file access denied (HTTP ${res.status}). Log in and check project access.`);
+                }
+                // No Range was requested. Only a complete response is a file;
+                // an error page or unsolicited partial response must never
+                // become an empty or concatenated snapshot.
+                if (res.status !== 200) throw new Error(`File download failed (HTTP ${res.status}).`);
+                return await res.buffer();
+            } catch (error) {
+                if (res) (res.body as stream.Readable).destroy();
+                controller.abort();
+                const code = (error as NodeJS.ErrnoException)?.code;
+                const transient = timedOut || ['ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'EAI_AGAIN', 'ERR_STREAM_PREMATURE_CLOSE'].includes(code || '');
+                if (!transient || attempt >= 2) {
+                    if (timedOut) throw new Error('File download timed out after 3 attempts. Please try again.', { cause: error });
+                    throw error;
+                }
+            } finally {
+                clearTimeout(timer);
             }
+            await new Promise(resolve => setTimeout(resolve, 1000 * 2 ** attempt));
         }
-
-        return Buffer.concat(content);
     }
 
     /**
