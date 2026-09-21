@@ -13,7 +13,7 @@ export interface HistoryPosition { baseVersion?: number }
 
 export type HistoryCommitNode =
     | { kind: 'local'; id: string; commit: CommitInfo; labels?: string[]; pending?: boolean }
-    | { kind: 'remote'; id: string; update: HistoryUpdate; commit?: CommitInfo };
+    | { kind: 'remote'; id: string; update: HistoryUpdate; commit?: CommitInfo; published?: boolean };
 export type HistoryNode = HistoryCommitNode
     | { kind: 'file'; id: string; parent: HistoryCommitNode; file: CommitFile }
     | { kind: 'more'; source: 'local' | 'remote' };
@@ -88,26 +88,24 @@ export class HistoryModel implements vscode.Disposable {
         };
     }
 
-    private remoteNodes(limit = this.remote.length): HistoryCommitNode[] {
+    private remoteNodes(): HistoryCommitNode[] {
         const records: HistoryCommitNode[] = [];
         const remote = this.remote.filter((item): item is Extract<HistoryCommitNode, { kind: 'remote' }> => item.kind === 'remote')
-            .sort((a, b) => b.update.toV - a.update.toV).slice(0, limit);
+            .sort((a, b) => b.update.toV - a.update.toV);
         for (const node of remote) {
             const cuts = new Set([node.update.fromV, node.update.toV]);
-            for (const receipt of this.receipts.published) {
-                for (const version of [receipt.fromV, receipt.toV]) if (version > node.update.fromV && version < node.update.toV) cuts.add(version);
-            }
             const baseVersion = this.position.baseVersion;
             if (baseVersion !== undefined && baseVersion > node.update.fromV && baseVersion < node.update.toV) cuts.add(baseVersion);
             const versions = [...cuts].sort((a, b) => b - a);
             for (let index = 0; index < versions.length - 1; index++) {
                 const toV = versions[index], fromV = versions[index + 1];
-                const receipt = this.receipts.published.find(item => item.toV === toV);
-                // A published snapshot can span multiple server summaries.
-                // Verified receipts combine them; timestamps never do.
-                if (this.receipts.published.some(item => toV < item.toV && toV > item.fromV)) continue;
-                records.push({ kind: 'remote', id: `overleaf:${receipt?.fromV ?? fromV}:${toV}`, commit: receipt?.commit,
-                    update: { ...node.update, fromV: receipt?.fromV ?? fromV, toV,
+                // Keep every Overleaf version even when one local commit
+                // produced several updates. A local diff is valid only when
+                // its full publication range matches this server record.
+                const receipt = this.receipts.published.find(item => item.fromV === fromV && item.toV === toV);
+                records.push({ kind: 'remote', id: `overleaf:${fromV}:${toV}`, commit: receipt?.commit,
+                    published: this.receipts.published.some(item => item.fromV <= fromV && item.toV >= toV),
+                    update: { ...node.update, fromV, toV,
                         labels: node.update.labels?.filter(label => label.version === toV) } });
             }
         }
@@ -155,7 +153,7 @@ export class HistoryModel implements vscode.Disposable {
         else {
             // min_count is a minimum, not a page-size cap. Reveal the cached
             // tail before requesting another server chunk.
-            if (this.remoteLimit >= this.remote.length && this.nextBefore !== undefined) await this.loadRemote(true);
+            if (this.remoteLimit >= this.remoteNodes().length && this.nextBefore !== undefined) await this.loadRemote(true);
             this.remoteLimit += 5;
             this.changed.fire();
         }
@@ -164,9 +162,10 @@ export class HistoryModel implements vscode.Disposable {
     async getChildren(node?: HistoryNode): Promise<HistoryNode[]> {
         if (!node) {
             if (!this.remoteLoaded) await this.loadRemote();
+            const remote = this.remoteNodes();
             return [
-                ...this.local, ...this.remoteNodes(this.remoteLimit),
-                ...(this.nextBefore !== undefined || this.remote.length > this.remoteLimit ? [{ kind: 'more' as const, source: 'remote' as const }] : []),
+                ...this.local, ...remote.slice(0, this.remoteLimit),
+                ...(this.nextBefore !== undefined || remote.length > this.remoteLimit ? [{ kind: 'more' as const, source: 'remote' as const }] : []),
                 ...(this.localHasMore ? [{ kind: 'more' as const, source: 'local' as const }] : []),
             ];
         }
