@@ -68,7 +68,7 @@ export interface HistoryUpdate {
     }>;
     labels?: HistoryLabel[];
 }
-export interface HistoryLabel { id: string; version: number; comment: string; user_display_name?: string }
+export interface HistoryLabel { id: string; version: number; comment: string; user_display_name?: string; created_at?: string }
 export interface HistoryPage { updates: HistoryUpdate[]; nextBeforeTimestamp?: number }
 export interface HistoryFile { pathname: string; newPathname?: string; operation?: string }
 export interface HistoryDiff { diff: Array<{ u?: string; d?: string; i?: string }> }

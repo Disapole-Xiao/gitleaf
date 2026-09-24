@@ -222,8 +222,12 @@
             button.append(content);
             if (row.pointers.length) {
                 const badges = el('span', 'commit-pointers');
-                const folded = row.pointers.includes('LOCAL') && row.pointers.includes('REMOTE');
-                for (const type of row.pointers) badges.append(pointer(type, folded && type === 'REMOTE'));
+                const folded = row.pointers.includes('LOCAL') && row.pointers.includes('REMOTE') && row.localVersion === row.version;
+                for (const type of row.pointers) {
+                    const badge = pointer(type, folded && type === 'REMOTE');
+                    if (type === 'LOCAL' && row.localVersion !== undefined && row.localVersion !== row.version) badge.title = `Local: v${row.localVersion}`;
+                    badges.append(badge);
+                }
                 button.append(badges);
             }
             button.addEventListener('click', () => toggle(row.id));

@@ -9,6 +9,7 @@ export interface GraphRow {
     lane: 'linear' | 'local' | 'remote' | 'join';
     pointers: string[];
     version?: number;
+    localVersion?: number;
     label: string;
     hoverMessage: string;
     author: string;
@@ -53,22 +54,27 @@ export function overleafHistoryMessage(update: HistoryUpdate): string {
 export function layoutHistory(nodes: HistoryCommitNode[], position: HistoryPosition = {}): { rows: GraphRow[] } {
     const newestRemote = Math.max(-1, ...nodes.flatMap(node => node.kind === 'remote' ? [node.update.toV] : []));
     const local = nodes.filter(node => node.kind === 'local');
+    const baseNode = nodes.find(node => node.kind === 'remote' && position.baseVersion !== undefined
+        && node.update.fromV < position.baseVersion && position.baseVersion <= node.update.toV);
     const split = position.baseVersion !== undefined && newestRemote > position.baseVersion && local.length > 0;
     const rows: GraphRow[] = nodes.map(node => {
-        const remoteLabels = node.kind === 'remote' ? node.update.labels || [] : [];
+        const remoteLabels = node.kind === 'remote' ? [...(node.update.labels || [])]
+            .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')) : [];
+        const messages = remoteLabels.map(label => commitMessage(label.comment)).filter((message): message is string => message !== undefined);
         const version = node.kind === 'remote' ? node.update.toV : undefined;
         const pointers: string[] = [];
-        if (node === local[0] || !local.length && version === position.baseVersion) pointers.push('LOCAL');
+        if (node === local[0] || !local.length && node === baseNode) pointers.push('LOCAL');
         if (version === newestRemote) pointers.push('REMOTE');
         return {
             id: node.id, kind: node.kind,
-            lane: split ? node.kind === 'local' ? 'local' : version! > position.baseVersion! ? 'remote'
-                : version === position.baseVersion ? 'join' : 'linear' : 'linear',
+            lane: split ? node.kind === 'local' ? 'local' : node === baseNode ? 'join'
+                : version! > position.baseVersion! ? 'remote' : 'linear' : 'linear',
             pointers,
             version,
+            localVersion: node.kind === 'remote' && pointers.includes('LOCAL') ? position.baseVersion : undefined,
             label: node.kind === 'local' ? node.commit.subject
-                : remoteLabels.map(label => commitMessage(label.comment)).find(message => message !== undefined) || '',
-            hoverMessage: node.kind === 'remote' ? overleafHistoryMessage(node.update) : node.commit.subject,
+                : messages[0] || '',
+            hoverMessage: node.kind === 'remote' ? [...messages, overleafHistoryMessage(node.update)].join('\n\n') : node.commit.subject,
             author: node.kind === 'remote' ? node.update.meta.users
                 .map(user => [user.first_name, user.last_name].filter(Boolean).join(' ')).join(', ')
                 : node.commit.author,

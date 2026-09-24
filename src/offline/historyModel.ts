@@ -89,32 +89,16 @@ export class HistoryModel implements vscode.Disposable {
     }
 
     private remoteNodes(): HistoryCommitNode[] {
-        const records: HistoryCommitNode[] = [];
         const remote = this.remote.filter((item): item is Extract<HistoryCommitNode, { kind: 'remote' }> => item.kind === 'remote')
             .sort((a, b) => b.update.toV - a.update.toV);
-        for (const node of remote) {
-            const cuts = new Set([node.update.fromV, node.update.toV]);
-            // Overleaf can extend a history group beyond a labeled version.
-            // Keep that exact version addressable so its message and diff survive.
-            for (const label of node.update.labels || []) {
-                if (label.version > node.update.fromV && label.version < node.update.toV) cuts.add(label.version);
-            }
-            const baseVersion = this.position.baseVersion;
-            if (baseVersion !== undefined && baseVersion > node.update.fromV && baseVersion < node.update.toV) cuts.add(baseVersion);
-            const versions = [...cuts].sort((a, b) => b - a);
-            for (let index = 0; index < versions.length - 1; index++) {
-                const toV = versions[index], fromV = versions[index + 1];
-                // Keep every Overleaf version even when one local commit
-                // produced several updates. A local diff is valid only when
-                // its full publication range matches this server record.
-                const receipt = this.receipts.published.find(item => item.fromV === fromV && item.toV === toV);
-                records.push({ kind: 'remote', id: `overleaf:${fromV}:${toV}`, commit: receipt?.commit,
-                    published: this.receipts.published.some(item => item.fromV <= fromV && item.toV >= toV),
-                    update: { ...node.update, fromV, toV,
-                        labels: node.update.labels?.filter(label => label.version === toV) } });
-            }
-        }
-        return records;
+        // Match Overleaf's All history list: one update range per row, with
+        // every label supplied for that range, including interior versions.
+        return remote.map(node => {
+            const { fromV, toV } = node.update;
+            const receipt = this.receipts.published.find(item => item.fromV === fromV && item.toV === toV);
+            return { ...node, commit: receipt?.commit,
+                published: this.receipts.published.some(item => item.fromV <= fromV && item.toV >= toV) };
+        });
     }
 
     private loadRemote(append = false): Promise<void> {
