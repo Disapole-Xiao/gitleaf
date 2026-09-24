@@ -2,6 +2,16 @@
 
 Only versions released on the Visual Studio Marketplace are listed here.
 
+## 1.1.1 — 2026-09-25
+
+### Fixes
+
+- Fix sync failures caused by interrupted file downloads from Overleaf.
+- Fix image and PDF uploads failing with a "Delete ... 404" error or leaving temporary filenames.
+- Fix missing history entries and commit messages in GitLeaf Graph. History entries now match Overleaf's All history view.
+- Fix long commit messages missing in history details. The full message now appears above the file changes, separated by a blank line.
+- Fix the release workflow incorrectly rejecting matching release notes.
+
 ## 1.1.0 — 2026-09-17
 
 ### New Features
