@@ -94,6 +94,11 @@ export class HistoryModel implements vscode.Disposable {
             .sort((a, b) => b.update.toV - a.update.toV);
         for (const node of remote) {
             const cuts = new Set([node.update.fromV, node.update.toV]);
+            // Overleaf can extend a history group beyond a labeled version.
+            // Keep that exact version addressable so its message and diff survive.
+            for (const label of node.update.labels || []) {
+                if (label.version > node.update.fromV && label.version < node.update.toV) cuts.add(label.version);
+            }
             const baseVersion = this.position.baseVersion;
             if (baseVersion !== undefined && baseVersion > node.update.fromV && baseVersion < node.update.toV) cuts.add(baseVersion);
             const versions = [...cuts].sort((a, b) => b - a);
