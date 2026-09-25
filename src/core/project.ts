@@ -452,7 +452,7 @@ export class GitLeafProject {
                     throw new OperationBlockedError(
                         'The interrupted push does not match Overleaf. Pull to reconcile before another push or revert.',
                     );
-                if (pending.commit.subject) await this.history.label(version, commitLabel(pending.commit.subject));
+                await this.history.label(version, commitLabel(pending.commit.subject));
                 receipts.published.push({ ...pending, toV: version });
                 await this.repository.markRemoteAsHead(pending.commit.hash);
                 receipts.integrated = { version, gitHash: pending.commit.hash };
@@ -488,7 +488,7 @@ export class GitLeafProject {
                     throw new Error(
                         'Overleaf changed while confirming the version. Push paused; its pending receipt protects your commit.',
                     );
-                if (commit.subject) await this.history.label(toV, commitLabel(commit.subject));
+                await this.history.label(toV, commitLabel(commit.subject));
                 receipts.published.push({ commit, fromV, toV });
                 await this.repository.markRemoteAsHead(commit.hash);
                 receipts.integrated = { version: toV, gitHash: commit.hash };
