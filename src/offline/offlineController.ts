@@ -89,11 +89,14 @@ export class OfflineController implements vscode.Disposable {
         const result = await this.execute({ type: 'pull' });
         await this.refreshHistory();
         if (result.conflicts.length) {
-            const action = await vscode.window.showWarningMessage(
+            void Promise.resolve(vscode.window.showWarningMessage(
                 `GitLeaf: Pull produced ${result.conflicts.length} conflict(s).`,
                 'Open First Conflict',
-            );
-            if (action) await vscode.window.showTextDocument(this.settings.getFilePath(result.conflicts[0]));
+            )).then(action => {
+                if (action) return vscode.window.showTextDocument(this.settings.getFilePath(result.conflicts[0]));
+            }).catch(error => {
+                void vscode.window.showErrorMessage(`GitLeaf: Could not open conflict - ${error}`);
+            });
         } else void vscode.window.showInformationMessage('GitLeaf: Pull complete.');
         return result;
     }
