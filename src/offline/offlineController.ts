@@ -71,14 +71,12 @@ export class OfflineController implements vscode.Disposable {
         await this.execute({ type: reserve ? 'activateOnline' : 'prepareOnline' });
     }
     async commit(): Promise<void> {
-        const value =
-            this.scm?.getCommitMessage() ||
-            (await vscode.window.showInputBox({
+        const value = this.scm ? this.scm.getCommitMessage() : await vscode.window.showInputBox({
                 title: 'Commit Offline Changes',
-                prompt: 'Describe this local snapshot',
+                prompt: 'Describe this local snapshot (optional)',
                 placeHolder: 'Update introduction',
-            }));
-        if (!value) return;
+            });
+        if (value === undefined) return;
         const result = await this.execute({ type: 'commit', message: value });
         if (result.commit) this.scm?.clearCommitMessage();
         void vscode.window.showInformationMessage(

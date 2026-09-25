@@ -274,7 +274,7 @@ export class GitRepository {
         }
         const staged = await this.run(['diff', '--cached', '--quiet'], { allowFailure: true });
         if (staged.exitCode === 0 && !(await this.revParse('MERGE_HEAD'))) return undefined;
-        await this.run(['commit', '-m', message]);
+        await this.run(['commit', '--allow-empty-message', '-m', message]);
         return this.head();
     }
 

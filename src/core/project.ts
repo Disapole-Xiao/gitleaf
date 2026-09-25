@@ -132,7 +132,6 @@ export class GitLeafProject {
                         return { unstaged: true };
                     case 'commit': {
                         const message = command.message.replace(/\s+/g, ' ').trim();
-                        if (!message) throw new OperationBlockedError('Commit message is required.');
                         const credential = await this.credentials.getCredential(settings.serverUrl);
                         if (!credential) throw new OperationBlockedError('Log in to Overleaf first.');
                         await this.repository.setAuthor(credential.userName, credential.userEmail);
@@ -453,7 +452,7 @@ export class GitLeafProject {
                     throw new OperationBlockedError(
                         'The interrupted push does not match Overleaf. Pull to reconcile before another push or revert.',
                     );
-                await this.history.label(version, commitLabel(pending.commit.subject));
+                if (pending.commit.subject) await this.history.label(version, commitLabel(pending.commit.subject));
                 receipts.published.push({ ...pending, toV: version });
                 await this.repository.markRemoteAsHead(pending.commit.hash);
                 receipts.integrated = { version, gitHash: pending.commit.hash };
@@ -489,7 +488,7 @@ export class GitLeafProject {
                     throw new Error(
                         'Overleaf changed while confirming the version. Push paused; its pending receipt protects your commit.',
                     );
-                await this.history.label(toV, commitLabel(commit.subject));
+                if (commit.subject) await this.history.label(toV, commitLabel(commit.subject));
                 receipts.published.push({ commit, fromV, toV });
                 await this.repository.markRemoteAsHead(commit.hash);
                 receipts.integrated = { version: toV, gitHash: commit.hash };
