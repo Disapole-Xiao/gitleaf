@@ -269,7 +269,7 @@ export class GitRepository {
 
     async commit(message: string): Promise<string | undefined> {
         if (await this.isRebasing()) {
-            await this.run(['rebase', await this.isClean() ? '--skip' : '--continue'], { env: { GIT_EDITOR: 'true' } });
+            await this.continuePull(message);
             return this.head();
         }
         const staged = await this.run(['diff', '--cached', '--quiet'], { allowFailure: true });
@@ -378,6 +378,25 @@ export class GitRepository {
         if (result.exitCode !== 0 && !changes.some(change => change.kind === 'conflict')) {
             throw new Error(result.stderr.toString('utf8').trim() || 'Git pull rebase failed.');
         }
+        return changes;
+    }
+
+    async continuePull(message = 'Resolve pull conflicts'): Promise<WorkingChange[]> {
+        if (!(await this.isRebasing())) throw new OperationBlockedError('No pull is waiting to continue.');
+        if ((await this.status()).some(change => change.kind === 'conflict'))
+            throw new OperationBlockedError('Resolve the current conflicts before continuing the pull.');
+        const staged = await this.run(['diff', '--cached', '--quiet'], { allowFailure: true });
+        const action = staged.exitCode === 0 ? '--skip' : '--continue';
+        if (action === '--continue') {
+            const messageFile = path.join(this.gitDir, 'rebase-merge', 'message');
+            const original = await fs.readFile(messageFile, 'utf8');
+            if (!original.split(/\r?\n/).some(line => line.trim() && !line.trimStart().startsWith('#')))
+                await fs.writeFile(messageFile, message.trim() || 'Resolve pull conflicts');
+        }
+        const result = await this.run(['rebase', action], { allowFailure: true, env: { GIT_EDITOR: 'true' } });
+        const changes = await this.status();
+        if (result.exitCode !== 0 && !changes.some(change => change.kind === 'conflict'))
+            throw new Error(result.stderr.toString('utf8').trim() || 'Git pull rebase could not continue.');
         return changes;
     }
 

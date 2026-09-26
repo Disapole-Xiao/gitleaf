@@ -307,8 +307,12 @@ export class GitLeafProject {
             await this.clone();
             return { conflicts: [] };
         }
-        if (await this.repository.isRebasing())
-            throw new OperationBlockedError('Finish or abort the current pull before pulling again.');
+        if (await this.repository.isRebasing()) {
+            const changes = await this.repository.continuePull();
+            await this.recordPullProgress();
+            const conflicts = changes.filter(change => change.kind === 'conflict').map(change => change.path);
+            if (conflicts.length) return { conflicts };
+        }
         const current = await this.repository.status();
         if (current.some((change) => change.kind === 'conflict'))
             throw new OperationBlockedError('Resolve the current conflicts before pulling.');
