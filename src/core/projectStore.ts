@@ -20,7 +20,17 @@ export async function writeJson(file: string, value: unknown): Promise<void> {
     const temporary = `${file}.${randomUUID()}.tmp`;
     try {
         await fs.writeFile(temporary, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
-        await fs.rename(temporary, file);
+        for (let attempt = 0; ; attempt++) {
+            try {
+                await fs.rename(temporary, file);
+                break;
+            } catch (error) {
+                const code = (error as NodeJS.ErrnoException).code;
+                if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(code || '') || attempt >= 5)
+                    throw error;
+                await new Promise(resolve => setTimeout(resolve, 50 * 2 ** attempt));
+            }
+        }
     } finally {
         await fs.rm(temporary, { force: true });
     }
