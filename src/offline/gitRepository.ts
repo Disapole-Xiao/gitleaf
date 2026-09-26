@@ -385,6 +385,9 @@ export class GitRepository {
         if (!(await this.isRebasing())) throw new OperationBlockedError('No pull is waiting to continue.');
         if ((await this.status()).some(change => change.kind === 'conflict'))
             throw new OperationBlockedError('Resolve the current conflicts before continuing the pull.');
+        const unstaged = (await this.run(['diff', '--name-only', '-z'])).stdout.toString('utf8').split('\0').filter(Boolean);
+        if (unstaged.length)
+            throw new OperationBlockedError(`Stage the remaining edited files before continuing Pull: ${unstaged.join(', ')}`);
         const staged = await this.run(['diff', '--cached', '--quiet'], { allowFailure: true });
         const action = staged.exitCode === 0 ? '--skip' : '--continue';
         if (action === '--continue') {
@@ -396,7 +399,8 @@ export class GitRepository {
         const result = await this.run(['rebase', action], { allowFailure: true, env: { GIT_EDITOR: 'true' } });
         const changes = await this.status();
         if (result.exitCode !== 0 && !changes.some(change => change.kind === 'conflict'))
-            throw new Error(result.stderr.toString('utf8').trim() || 'Git pull rebase could not continue.');
+            throw new Error(result.stderr.toString('utf8').trim()
+                || result.stdout.toString('utf8').trim() || 'Git pull rebase could not continue.');
         return changes;
     }
 
