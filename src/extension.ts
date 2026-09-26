@@ -775,43 +775,49 @@ async function cmdChangeMode(context: vscode.ExtensionContext): Promise<void> {
     );
     if (confirm !== `Switch to ${selected.mode}`) return;
 
-    await offlineOperation;
-    if (changingMode) return;
-    changingMode = true;
-    try {
-        if (selected.mode === 'online') {
-            if (!offlineController) throw new Error('Offline repository is not ready.');
-            await offlineController.prepareOnline(true);
-        } else {
-            if (!syncEngine) throw new Error('Online connection is not ready.');
-            const repository = new GitRepository(settingsManager.getWorkspaceFolder().fsPath);
-            await repository.initialize();
-            await repository.assertSettled();
-            try {
-                const snapshot = await syncEngine.finishOnline();
-                syncEngine = undefined;
-                await repository.acceptOnlineSnapshot(snapshot);
-            } catch (error) {
-                if (syncEngine?.hasPendingFileOperations) throw error;
-                const keep = await vscode.window.showWarningMessage(
-                    `Cannot confirm a clean online snapshot: ${errorMessage(error)}\nEnter Offline with local changes preserved against the last trusted baseline?`,
-                    { modal: true }, 'Keep changes and enter Offline');
-                if (!keep) throw error;
-                await syncEngine?.close();
-                syncEngine = undefined;
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: `GitLeaf: Switching to ${selected.mode === 'online' ? 'Online' : 'Offline'}...`,
+        cancellable: false,
+    }, async () => {
+        await offlineOperation;
+        if (changingMode) return;
+        changingMode = true;
+        try {
+            if (selected.mode === 'online') {
+                if (!offlineController) throw new Error('Offline repository is not ready.');
+                await offlineController.prepareOnline(true);
+            } else {
+                if (!syncEngine) throw new Error('Online connection is not ready.');
+                const repository = new GitRepository(settingsManager.getWorkspaceFolder().fsPath);
+                await repository.initialize();
+                await repository.assertSettled();
+                try {
+                    const snapshot = await syncEngine.finishOnline();
+                    syncEngine = undefined;
+                    await repository.acceptOnlineSnapshot(snapshot);
+                } catch (error) {
+                    if (syncEngine?.hasPendingFileOperations) throw error;
+                    const keep = await vscode.window.showWarningMessage(
+                        `Cannot confirm a clean online snapshot: ${errorMessage(error)}\nEnter Offline with local changes preserved against the last trusted baseline?`,
+                        { modal: true }, 'Keep changes and enter Offline');
+                    if (!keep) throw error;
+                    await syncEngine?.close();
+                    syncEngine = undefined;
+                }
             }
-        }
-        await settingsManager.update({ mode: selected.mode, autoSync: selected.mode === 'online' });
-        try { await initializeSync(context, settingsManager, false, selected.mode === 'online'); }
-        catch (error) {
-            // A failed online start cannot leave an Online label or a socket
-            // that later publishes changes without another explicit switch.
-            await syncEngine?.close(); syncEngine = undefined;
-            await settingsManager.update({ mode: 'offline', autoSync: false });
-            await initializeSync(context, settingsManager);
-            throw error;
-        }
-    } finally { changingMode = false; }
+            await settingsManager.update({ mode: selected.mode, autoSync: selected.mode === 'online' });
+            try { await initializeSync(context, settingsManager, false, selected.mode === 'online'); }
+            catch (error) {
+                // A failed online start cannot leave an Online label or a socket
+                // that later publishes changes without another explicit switch.
+                await syncEngine?.close(); syncEngine = undefined;
+                await settingsManager.update({ mode: 'offline', autoSync: false });
+                await initializeSync(context, settingsManager);
+                throw error;
+            }
+        } finally { changingMode = false; }
+    });
 }
 
 /**
