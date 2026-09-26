@@ -309,7 +309,7 @@ async function initializeSync(
             await syncEngine.pullAll();
             log('Auto-pull complete');
 
-            // Join all docs to receive real-time OT updates
+            // Join all docs to receive remote change notifications.
             await syncEngine.joinAllDocsForWatching();
             log('Watching for remote changes');
 
@@ -646,7 +646,7 @@ async function cmdLinkFolder(context: vscode.ExtensionContext) {
     const modeSelection = await vscode.window.showQuickPick([
         {
             label: '$(radio-tower) Online',
-            description: 'Live editing, automatic synchronization, collaborator cursors',
+            description: 'Sync saved files automatically and show collaborator cursors',
             mode: 'online' as const,
         },
         {
@@ -747,7 +747,7 @@ async function cmdSyncNow() {
         }
         return;
     }
-    // Online mode already pushes edits as they are made; pull any pending remote updates.
+    // Online mode pushes saved files automatically; refresh remote files now.
     await cmdPullFromOverleaf();
 }
 
@@ -761,14 +761,14 @@ async function cmdChangeMode(context: vscode.ExtensionContext): Promise<void> {
     }
 
     const selected = await vscode.window.showQuickPick([
-        { label: '$(radio-tower) Online', description: 'Automatic live sync and collaborator cursors', mode: 'online' as const },
+        { label: '$(radio-tower) Online', description: 'Sync saved files automatically and show collaborator cursors', mode: 'online' as const },
         { label: '$(source-control) Offline', description: 'Manual commit, pull and push', mode: 'offline' as const },
     ], { title: `Change mode (currently ${settings.mode})` });
     if (!selected || selected.mode === settings.mode) return;
 
     const confirm = await vscode.window.showWarningMessage(
         selected.mode === 'online'
-            ? 'Online mode will begin synchronizing editor changes immediately.'
+            ? 'Online mode will synchronize files when they are saved.'
             : 'Offline mode will stop automatic synchronization and use explicit GitLeaf commits.',
         { modal: true },
         `Switch to ${selected.mode}`,
@@ -888,7 +888,7 @@ async function cmdPushToOverleaf() {
         return;
     }
 
-    vscode.window.showInformationMessage('GitLeaf: Push is automatic via real-time sync');
+    vscode.window.showInformationMessage('GitLeaf: Saved files are pushed automatically in Online mode');
 }
 
 /**
@@ -1198,6 +1198,7 @@ async function cmdReconnect() {
         log('Reconnected to Overleaf');
 
         await syncEngine.pullAll();
+        await syncEngine.joinAllDocsForWatching();
         vscode.window.showInformationMessage(`GitLeaf: Reconnected to "${projectSettings.projectName}"`);
     } catch (error) {
         log(`Failed to reconnect: ${error}`);

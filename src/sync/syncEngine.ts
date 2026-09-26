@@ -14,13 +14,22 @@ import { acquireProject } from '../core/projectLock';
  */
 
 import * as vscode from 'vscode';
-import { OnlineTextSync } from './onlineTextSync';
 
 import { BaseAPI, FileEntity } from '../api/base';
 
 import { SettingsManager } from '../utils/projectAdapter';
 
 import { DEBOUNCE_DELAY } from '../consts';
+import { normalizeDocumentText } from './textOperations';
+
+const documentText = (content: Uint8Array): string => normalizeDocumentText(new TextDecoder().decode(content));
+const documentEquals = (a: Uint8Array | undefined, b: Uint8Array): boolean =>
+    a !== undefined && documentText(a) === documentText(b);
+const suspiciousTextGrowth = (before: Uint8Array, after: Uint8Array): boolean => {
+    const previous = documentText(before).length;
+    const current = documentText(after).length;
+    return current - previous > 64 * 1024 && current > previous * 4;
+};
 
 /**
  * Check if an error is a FileNotFound error (race condition safe)
@@ -63,6 +72,10 @@ export class SyncEngine extends RemoteProject {
     private readonly onlineTasks = new Set<Promise<void>>();
     private readonly delayedTasks = new Map<NodeJS.Timeout, () => void>();
     private onlineFailure?: Error;
+    private live = false;
+    private initialPull = true;
+    private readonly pendingDocUpdates = new Set<string>();
+    private refreshScheduled = false;
     private activity = 0;
     constructor(
         api: BaseAPI,
@@ -76,28 +89,34 @@ export class SyncEngine extends RemoteProject {
      * Set status and emit event
      */
     protected setStatus(status: SyncStatus, message?: string, file?: string, authError: boolean = false): void {
-        if (status === 'error' && this.onlineText) this.onlineFailure = new Error(message || 'Online sync failed.');
-        this._status = status;
+        if (this.live && (status === 'error' || status === 'disconnected') && !this.onlineFailure) {
+            this.onlineFailure = new Error(message || (status === 'disconnected'
+                ? 'Connection lost. Reconnect before syncing online.' : 'Online sync failed.'));
+            this.log(`Online sync paused: ${this.onlineFailure.message}`);
+            void vscode.window.showErrorMessage(`GitLeaf: Online sync paused for this project. ${this.onlineFailure.message}`);
+        }
+        if (this.onlineFailure && this.live) {
+            super.setStatus('error', `Online sync paused: ${this.onlineFailure.message}`, file, authError);
+            return;
+        }
         super.setStatus(status, message, file, authError);
+    }
+    protected assertRemoteWriteAllowed(): void {
+        if (this.onlineFailure) throw this.onlineFailure;
     }
     protected configureSocket(readOnly: boolean): void {
         if (this.settings.getSettings()?.mode !== 'online' || readOnly) {
             super.configureSocket(readOnly);
             return;
         }
-
-        this.onlineText = new OnlineTextSync(this.socket!, this.settings, (message) => {
-            this.log(message);
-            this.setStatus('error', message);
-            void vscode.window.showErrorMessage(`GitLeaf: Online sync paused. ${message}`);
-        });
+        this.live = true;
         this.socket!.registerHandlers({
             onFileCreated: (parentId, type, entity) =>
                 this.trackOnline(() => this.handleRemoteFileCreated(parentId, type, entity)),
             onFileRenamed: (id, name) => this.trackOnline(() => this.handleRemoteFileRenamed(id, name)),
             onFileRemoved: (id) => this.trackOnline(() => this.handleRemoteFileRemoved(id)),
             onFileMoved: (id, parentId) => this.trackOnline(() => this.handleRemoteFileMoved(id, parentId)),
-            onFileChanged: (update) => this.onlineText?.receive(update),
+            onFileChanged: (update) => this.scheduleRemoteDocument(update.doc),
         });
     }
     private releaseSession?: () => Promise<void>;
@@ -133,8 +152,56 @@ export class SyncEngine extends RemoteProject {
         );
     }
 
+    private scheduleRemoteDocument(id?: string): void {
+        if (id) this.pendingDocUpdates.add(id);
+        if (this.initialPull || this.refreshScheduled || !this.pendingDocUpdates.size || this.onlineFailure) return;
+        this.refreshScheduled = true;
+        this.deferOnline(async () => {
+            this.refreshScheduled = false;
+            const ids = [...this.pendingDocUpdates];
+            this.pendingDocUpdates.clear();
+            for (const docId of ids) await this.refreshRemoteDocument(docId);
+        });
+    }
+
+    /** A socket event signals a fresh server snapshot, not a patch to stale disk content. */
+    private async refreshRemoteDocument(id: string): Promise<void> {
+        const entry = this.fileTree.get(id);
+        if (!entry) { this.pendingDocUpdates.add(id); return; }
+        if (entry.type !== 'doc' || !this.shouldSync(entry.path)) return;
+        if (!this.acquireLock(entry.path)) {
+            this.scheduleRemoteDocument(id);
+            return;
+        }
+        try {
+            const baseline = this.baseContent.get(entry.path);
+            if (!baseline) throw new Error(`${entry.path} has no confirmed sync baseline. Reconcile in Offline.`);
+            if (!this.socket) return;
+            const uri = this.settings.getFilePath(entry.path);
+            const dirty = () => vscode.workspace.textDocuments.some(document =>
+                document.uri.toString() === uri.toString() && document.isDirty);
+            if (dirty() || !documentEquals(await vscode.workspace.fs.readFile(uri), baseline))
+                throw new Error(`${entry.path} has local edits while Overleaf changed. Reconcile in Offline.`);
+            const { lines } = await this.socket.joinDoc(id);
+            this.assertRemoteWriteAllowed();
+            if (dirty() || !documentEquals(await vscode.workspace.fs.readFile(uri), baseline))
+                throw new Error(`${entry.path} changed during the remote download. Reconcile in Offline.`);
+            const remote = Buffer.from(lines.join('\n'));
+            if (!contentEquals(remote, baseline)) {
+                this.setStatus('pulling', `Updating ${entry.path}`, entry.path);
+                await vscode.workspace.fs.writeFile(uri, remote);
+                this.log(`Remote update: ${entry.path}`);
+            }
+            this.baseContent.set(entry.path, remote);
+            this.fileCache.set(entry.path, { hash: hashContent(remote), timestamp: Date.now() });
+            this.setStatus('idle');
+        } finally {
+            this.releaseLock(entry.path);
+        }
+    }
+
     async flushOnline(): Promise<void> {
-        if (!this.onlineText) return;
+        if (!this.live) return;
         if (this.status === 'disconnected') throw new Error('Reconnect before confirming an online snapshot.');
         let timer: NodeJS.Timeout | undefined;
         try {
@@ -143,7 +210,6 @@ export class SyncEngine extends RemoteProject {
                     do {
                         if (this.onlineFailure) throw this.onlineFailure;
                         await Promise.all(this.onlineTasks);
-                        await this.onlineText?.flush();
                     } while (this.onlineTasks.size);
                     if (this.onlineFailure) throw this.onlineFailure;
                 })(),
@@ -160,10 +226,10 @@ export class SyncEngine extends RemoteProject {
     }
 
     private trackOnline(action: () => Promise<void>): void {
+        if (this.onlineFailure) return;
         this.activity++;
         const task = action().catch((error) => {
-            this.onlineFailure = error instanceof Error ? error : new Error(String(error));
-            this.setStatus('error', this.onlineFailure.message);
+            this.setStatus('error', error instanceof Error ? error.message : String(error));
         });
         this.onlineTasks.add(task);
         void task.finally(() => this.onlineTasks.delete(task));
@@ -172,7 +238,7 @@ export class SyncEngine extends RemoteProject {
     private trackLocal(uri: vscode.Uri, action: () => Promise<void>): void {
         // Build output and .gitleaf metadata are not online activity. They must
         // not invalidate a stable cutoff while LaTeX or Git is writing files.
-        if (this.shouldSync(this.getRelativePath(uri))) this.trackOnline(action);
+        if (!this.initialPull && this.shouldSync(this.getRelativePath(uri))) this.trackOnline(action);
     }
 
     private deferOnline(action: () => Promise<void>): void {
@@ -181,12 +247,12 @@ export class SyncEngine extends RemoteProject {
                 new Promise<void>((resolve) => {
                     const timer = setTimeout(() => {
                         this.delayedTasks.delete(timer);
-                        if (!this.socket) {
+                        if (!this.socket || this.onlineFailure) {
                             resolve();
                             return;
                         }
                         void action().then(resolve, (error) => {
-                            this.onlineFailure = new Error(String(error));
+                            this.setStatus('error', String(error));
                             resolve();
                         });
                     }, DEBOUNCE_DELAY);
@@ -195,16 +261,16 @@ export class SyncEngine extends RemoteProject {
         );
     }
 
-    /** Establish a precise cut: flush text acknowledgements AND file CRUD,
+    /** Establish a precise cut: flush file tasks and remote refreshes,
      * capture a stable version, then detach synchronously before returning.
      * Changes made after this cut remain ordinary offline working changes.
      */
     async finishOnline(): Promise<Map<string, Uint8Array>> {
         await this.flushOnline();
-        const revision = this.activity + (this.onlineText?.revision || 0);
+        const revision = this.activity;
         const snapshot = await this.readRemoteSnapshot();
         await this.flushOnline();
-        if (revision !== this.activity + (this.onlineText?.revision || 0))
+        if (revision !== this.activity)
             throw new Error('The project changed while switching modes. Wait for sync to settle and try again.');
         await this.close();
         return snapshot;
@@ -277,8 +343,6 @@ export class SyncEngine extends RemoteProject {
         }
 
         try {
-            const watchedEntry = this.fileTreeByPath.get(relativePath);
-            if (this.onlineText && watchedEntry?.type === 'doc' && this.onlineText.has(watchedEntry.id)) return;
             // Read file content - may throw if file was deleted between watcher event and now
             let content: Uint8Array;
             try {
@@ -308,7 +372,11 @@ export class SyncEngine extends RemoteProject {
                 if (!this.socket) {
                     throw new Error(`Cannot update ${relativePath}: real-time connection is unavailable`);
                 }
-                const pushed = await this.pushDocumentChanges(entry.id, relativePath, content);
+                const baseline = this.baseContent.get(relativePath);
+                if (!baseline) throw new Error(`${relativePath} has no confirmed sync baseline. Reconcile in Offline.`);
+                if (suspiciousTextGrowth(baseline, content))
+                    throw new Error(`${relativePath} grew unexpectedly. Online sending stopped before upload; review the file in Offline.`);
+                const pushed = await this.pushDocumentChanges(entry.id, relativePath, content, baseline);
                 if (pushed) {
                     this.log(`Pushed to Overleaf: ${relativePath}`);
                 }
@@ -317,7 +385,7 @@ export class SyncEngine extends RemoteProject {
                 this.log(`Replaced on Overleaf: ${relativePath}`);
             }
 
-            this.baseContent.set(relativePath, content);
+            this.baseContent.set(relativePath, entry.type === 'doc' ? Buffer.from(documentText(content)) : content);
             this.setStatus('idle');
         } catch (error) {
             // Don't show error for file-not-found during rapid operations
@@ -379,6 +447,7 @@ export class SyncEngine extends RemoteProject {
 
             if (stat.type === vscode.FileType.Directory) {
                 const folderPath = relativePath + '/';
+                this.assertRemoteWriteAllowed();
                 const result = await this.api.addFolder(projectSettings.projectId, parentId, name);
                 ensureApiSuccess(result, `Create folder ${folderPath}`);
 
@@ -426,6 +495,7 @@ export class SyncEngine extends RemoteProject {
                     // Set this before upload so the socket acknowledgement is
                     // recognized as an echo of the local operation.
                     this.baseContent.set(relativePath, content);
+                    this.assertRemoteWriteAllowed();
                     const result = await this.api.uploadFile(projectSettings.projectId, parentId, name, content);
                     ensureApiSuccess(result, `Upload ${relativePath}`);
                     if (!this.trackUploadedEntity(result, parentId, name, relativePath)) {
@@ -558,64 +628,52 @@ export class SyncEngine extends RemoteProject {
             const alreadySynced = this.baseContent.has(path);
             if (alreadySynced) {
                 debugLog(`Ignoring remote create echo for already-synced: ${path}`);
+                if (type === 'doc' && this.pendingDocUpdates.delete(entry.id))
+                    this.scheduleRemoteDocument(entry.id);
                 this.setStatus('idle');
                 return;
             }
 
-            if (type === 'doc' && this.onlineText) {
-                await this.onlineText.open(entry.id, path);
-                const content = Buffer.from(this.onlineText.text(entry.id)!);
-                this.baseContent.set(path, content);
-                this.fileCache.set(path, { hash: hashContent(content), timestamp: Date.now() });
-            } else if (type === 'folder') {
+            if (type === 'folder') {
                 await vscode.workspace.fs.createDirectory(localUri);
                 // Track folders in baseContent with empty content
                 this.baseContent.set(path, new Uint8Array(0));
             } else {
-                // Download content - use correct API based on type
+                // Subscribe before writing the document snapshot so later edits
+                // cannot fall into the gap between download and join.
                 const projectSettings = this.settings.getSettings()!;
-                let content: Uint8Array | undefined;
+                let content: Uint8Array;
 
                 if (type === 'doc') {
-                    // For docs, use getDocContent
-                    const result = await this.api.getDocContent(projectSettings.projectId, entity._id);
-                    if (result.type === 'success' && result.lines) {
-                        content = new TextEncoder().encode(result.lines.join('\n'));
-                    }
+                    if (!this.socket) throw new Error(`Document connection unavailable: ${path}`);
+                    const { lines } = await this.socket.joinDoc(entity._id);
+                    this.joinedDocs.add(entity._id);
+                    content = Buffer.from(lines.join('\n'));
                 } else {
-                    // For binary files, use getFile
                     const result = await this.api.getFile(projectSettings.projectId, entity._id);
-                    if (result.type === 'success' && result.content) {
-                        content = result.content;
-                    }
+                    ensureApiSuccess(result, `Download ${path}`);
+                    if (!result.content) throw new Error(`Download returned no content: ${path}`);
+                    content = result.content;
                 }
 
-                if (content) {
-                    // Do not overwrite an unrelated local file with the same name.
-                    if (await this.localFileExists(localUri)) {
-                        const resolution = await this.askConflictResolution(path, localUri, content);
-                        if (resolution !== 'useRemote') return;
-                    }
-                    await vscode.workspace.fs.writeFile(localUri, content);
-                    this.baseContent.set(path, content);
-                    this.fileCache.set(path, { hash: hashContent(content), timestamp: Date.now() });
-                    this.log(`Downloaded new file from Overleaf: ${path}`);
+                // Do not overwrite an unrelated local file with the same name.
+                if (await this.localFileExists(localUri)) {
+                    const resolution = await this.askConflictResolution(path, localUri, content);
+                    if (resolution !== 'useRemote')
+                        throw new Error(`${path} conflicts with a new Overleaf file. Reconcile in Offline.`);
                 }
-
-                // Join new docs to receive OT updates
-                if (type === 'doc' && this.socket && !this.joinedDocs.has(entity._id)) {
-                    try {
-                        await this.socket.joinDoc(entity._id);
-                        this.joinedDocs.add(entity._id);
-                    } catch {
-                        // Ignore join errors
-                    }
-                }
+                await vscode.workspace.fs.writeFile(localUri, content);
+                this.baseContent.set(path, content);
+                this.fileCache.set(path, { hash: hashContent(content), timestamp: Date.now() });
+                this.log(`Downloaded new file from Overleaf: ${path}`);
             }
 
+            if (type === 'doc' && this.pendingDocUpdates.delete(entry.id))
+                this.scheduleRemoteDocument(entry.id);
             this.setStatus('idle');
         } catch (error) {
             console.error(`[GitLeaf] Failed to sync remote create ${path}:`, error);
+            throw error;
         } finally {
             this.releaseLock(path);
         }
@@ -667,6 +725,7 @@ export class SyncEngine extends RemoteProject {
             this.setStatus('idle');
         } catch (error) {
             console.error(`[GitLeaf] Failed to sync remote rename:`, error);
+            throw error;
         } finally {
             this.releaseLock(oldPath);
         }
@@ -708,7 +767,6 @@ export class SyncEngine extends RemoteProject {
 
             // Remove from tree
             this.fileTree.delete(entityId);
-            this.onlineText?.remove(entityId);
             this.fileTreeByPath.delete(entry.path);
 
             // Delete local file
@@ -721,6 +779,7 @@ export class SyncEngine extends RemoteProject {
             this.setStatus('idle');
         } catch (error) {
             console.error(`[GitLeaf] Failed to sync remote delete:`, error);
+            throw error;
         } finally {
             this.releaseLock(entry.path);
         }
@@ -756,17 +815,20 @@ export class SyncEngine extends RemoteProject {
             this.setStatus('idle');
         } catch (error) {
             console.error(`[GitLeaf] Failed to sync remote move:`, error);
+            throw error;
         } finally {
             this.releaseLock(oldPath);
         }
     }
 
-    /** Ensure all online text sessions are initialized and stay joined. */
+    /** Keep documents subscribed so socket events can refresh their disk copies. */
     async joinAllDocsForWatching(): Promise<void> {
-        if (!this.onlineText) return;
+        this.assertRemoteWriteAllowed();
+        if (!this.socket || !this.live) return;
         for (const entry of this.fileTree.values()) {
-            if (entry.type === 'doc' && this.shouldSync(entry.path)) {
-                await this.onlineText.open(entry.id, entry.path);
+            if (entry.type === 'doc' && this.shouldSync(entry.path) && !this.joinedDocs.has(entry.id)) {
+                await this.socket.joinDoc(entry.id);
+                this.joinedDocs.add(entry.id);
             }
         }
     }
@@ -1087,10 +1149,12 @@ export class SyncEngine extends RemoteProject {
      * Perform full sync (pull all files)
      */
     async pullAll(): Promise<void> {
+        this.assertRemoteWriteAllowed();
         if (!this.project) {
             throw new Error('Not connected');
         }
 
+        this.initialPull = true;
         debugLog('pullAll: Starting pull');
         debugLog('pullAll: File tree size:', this.fileTree.size);
         debugLog('pullAll: Project name:', this.project.name);
@@ -1110,15 +1174,6 @@ export class SyncEngine extends RemoteProject {
             const downloadFile = async (entry: FileTreeEntry) => {
                 debugLog('pullAll: Processing', entry.path, entry.type);
 
-                if (entry.type === 'doc' && this.onlineText) {
-                    if (!this.shouldSync(entry.path)) return;
-                    await this.onlineText.open(entry.id, entry.path);
-                    const content = Buffer.from(this.onlineText.text(entry.id)!);
-                    this.baseContent.set(entry.path, content);
-                    this.fileCache.set(entry.path, { hash: hashContent(content), timestamp: Date.now() });
-                    downloadedCount++;
-                    return;
-                }
                 if (entry.type === 'folder') {
                     const localUri = this.settings.getFilePath(entry.path);
                     await vscode.workspace.fs.createDirectory(localUri);
@@ -1132,18 +1187,28 @@ export class SyncEngine extends RemoteProject {
                     return;
                 }
 
-                // Get remote content - docs use joinDoc via socket, files use HTTP
-                const result = await this.api.getFile(projectSettings.projectId, entry.id);
-                ensureApiSuccess(result, `Download ${entry.path}`);
-                if (!result.content) throw new Error(`Download returned no content: ${entry.path}`);
-                const remoteContent = result.content;
+                // Documents stay joined for change notifications; binary files use HTTP.
+                let remoteContent: Uint8Array;
+                if (entry.type === 'doc') {
+                    if (!this.socket) throw new Error(`Document connection unavailable: ${entry.path}`);
+                    const { lines } = await this.socket.joinDoc(entry.id);
+                    this.joinedDocs.add(entry.id);
+                    remoteContent = Buffer.from(lines.join('\n'));
+                } else {
+                    const result = await this.api.getFile(projectSettings.projectId, entry.id);
+                    ensureApiSuccess(result, `Download ${entry.path}`);
+                    if (!result.content) throw new Error(`Download returned no content: ${entry.path}`);
+                    remoteContent = result.content;
+                }
 
                 const localUri = this.settings.getFilePath(entry.path);
                 const exists = await this.localFileExists(localUri);
 
                 // Check for conflicts or new remote files
                 if (exists) {
-                    const hasConflict = await this.hasConflict(localUri, remoteContent);
+                    const hasConflict = entry.type === 'doc'
+                        ? !documentEquals(await vscode.workspace.fs.readFile(localUri), remoteContent)
+                        : await this.hasConflict(localUri, remoteContent);
                     if (hasConflict) {
                         conflictCount++;
                         const resolution = await this.askConflictResolution(entry.path, localUri, remoteContent);
@@ -1151,6 +1216,7 @@ export class SyncEngine extends RemoteProject {
                         if (resolution === 'skip') {
                             debugLog('pullAll: Skipped (user choice)', entry.path);
                             skippedCount++;
+                            if (this.live) throw new Error(`${entry.path} was skipped during Online sync. Reconcile before reconnecting.`);
                             return;
                         }
 
@@ -1161,10 +1227,12 @@ export class SyncEngine extends RemoteProject {
                             const localContent = await vscode.workspace.fs.readFile(localUri);
 
                             if (entry.type === 'doc') {
+                                if (this.live && suspiciousTextGrowth(remoteContent, localContent))
+                                    throw new Error(`${entry.path} grew unexpectedly. Online sending stopped before upload; review the file in Offline.`);
                                 if (!this.socket) {
                                     throw new Error(`Cannot update ${entry.path}: real-time connection is unavailable`);
                                 }
-                                await this.pushDocumentChanges(entry.id, entry.path, localContent);
+                                await this.pushDocumentChanges(entry.id, entry.path, localContent, remoteContent);
                             } else {
                                 await this.replaceRemoteFile(entry, localContent);
                             }
@@ -1188,7 +1256,9 @@ export class SyncEngine extends RemoteProject {
                 }
 
                 // Skip write if content is identical
-                if (contentEquals(localContent, remoteContent)) {
+                if (entry.type === 'doc'
+                    ? documentEquals(localContent, remoteContent)
+                    : contentEquals(localContent, remoteContent)) {
                     // Content is the same, just update cache
                     this.baseContent.set(entry.path, remoteContent);
                     this.fileCache.set(entry.path, { hash: hashContent(remoteContent), timestamp: Date.now() });
@@ -1260,7 +1330,9 @@ export class SyncEngine extends RemoteProject {
 
             await this.settings.updateLastSynced();
 
-            if (this.onlineText && !this.localWatcher) this.setupLocalWatcher();
+            if (this.live && !this.localWatcher) this.setupLocalWatcher();
+            this.initialPull = false;
+            this.scheduleRemoteDocument();
             const message = `Pull complete: ${downloadedCount} downloaded, ${skippedCount} skipped, ${conflictCount} conflicts`;
             debugLog('pullAll:', message);
             this.setStatus('idle', message);
@@ -1275,13 +1347,12 @@ export class SyncEngine extends RemoteProject {
      * Disconnect and cleanup
      */
     disconnect(): void {
+        this.live = false;
         for (const [timer, resolve] of this.delayedTasks) {
             clearTimeout(timer);
             resolve();
         }
         this.delayedTasks.clear();
-        this.onlineText?.dispose();
-        this.onlineText = undefined;
         this.socket?.disconnect();
         this.socket = undefined;
         this.disposables.forEach((d) => d.dispose());

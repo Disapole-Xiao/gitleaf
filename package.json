@@ -505,7 +505,6 @@
     "ignore": "7.0.5",
     "mime-types": "^2.1.35",
     "node-fetch": "^2.7.0",
-    "ot-json0": "1.1.0",
     "patch-package": "8.0.1",
     "proper-lockfile": "4.1.2",
     "socket.io-client": "github:overleaf/socket.io-client#0.9.17-overleaf-5",
