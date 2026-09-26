@@ -87,7 +87,7 @@ export class EditorMirror {
         // A remote LF rendered as CRLF is an acknowledgement, not a fresh edit.
         // Otherwise every render adds another newline and echoes it to Overleaf.
         text = normalizeEditorText(text);
-        if (this.expected?.version === version - 1 && this.expected.text === text) {
+        if (this.expected && version > this.expected.version && this.expected.text === text) {
             this.remote = this.expected.tail;
         } else {
             const [local, remote] = transformText(diffText(this.text, text), this.remote);
@@ -103,6 +103,21 @@ export class EditorMirror {
         if (text === this.text) { this.remote = []; this.expected = undefined; return; }
         this.expected = { version, text, tail: [] };
         return { text, op: this.remote };
+    }
+    completeRender(applied: boolean, text: string, version: number): boolean {
+        const expected = this.expected;
+        if (!expected) throw new Error('Editor changed while applying a remote edit. Reconnect before editing online.');
+        this.expected = undefined;
+        if (applied) {
+            // The editor may emit several changes for one WorkspaceEdit. Treat
+            // its final text as the remote render before considering any extra
+            // edits made during the await as local input.
+            this.remote = expected.tail;
+            this.text = expected.text;
+        }
+        if (normalizeEditorText(text) === this.text) return false;
+        this.accept(text, version);
+        return true;
     }
     cancel(): void { this.expected = undefined; }
 }

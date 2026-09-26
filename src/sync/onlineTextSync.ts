@@ -10,6 +10,7 @@ interface DocumentState {
     model: TextSession;
     mirror?: EditorMirror;
     document?: vscode.TextDocument;
+    applyingEdit?: boolean;
     queued: DocumentUpdate[];
     rendering?: Promise<void>;
     timer?: NodeJS.Timeout;
@@ -37,6 +38,7 @@ export class OnlineTextSync implements vscode.Disposable {
             const state = [...this.documents.values()].find(item => item.document === event.document);
             if (!state?.mirror) return;
             this.revision++;
+            if (state.applyingEdit) return;
             try {
                 state.mirror.accept(event.document.getText(), event.document.version);
                 if (!state.error) this.schedule(state);
@@ -178,7 +180,13 @@ export class OnlineTextSync implements vscode.Disposable {
                     edits.push(vscode.TextEdit.replace(new vscode.Range(document.positionAt(start), document.positionAt(offset)), inserted));
                 }
                 edit.set(document.uri, edits);
-                if (!(await vscode.workspace.applyEdit(edit))) mirror.cancel();
+                state.applyingEdit = true;
+                let localChange: boolean;
+                try {
+                    const applied = await vscode.workspace.applyEdit(edit);
+                    localChange = mirror.completeRender(applied, document.getText(), document.version);
+                } finally { state.applyingEdit = false; }
+                if (localChange) this.schedule(state);
                 continue;
             }
             if (document.isDirty && !(await document.save()) && document.isDirty)
