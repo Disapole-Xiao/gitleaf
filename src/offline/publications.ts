@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import type { CommitInfo } from './gitRepository';
 
-export interface Publication { commit: CommitInfo; fromV: number; toV: number }
+export interface Publication { commit: CommitInfo; fromV: number; toV: number; mixed?: boolean }
 export interface PublicationState {
     published: Publication[];
     labels: Record<string, string[]>;

@@ -37,6 +37,15 @@ export interface PushPlan {
     deletes: string[];
 }
 
+export function pushPathsMatch(
+    plan: PushPlan,
+    actual: ReadonlyMap<string, Uint8Array>,
+    expected: ReadonlyMap<string, Uint8Array>,
+): boolean {
+    return [...plan.creates, ...plan.updates, ...plan.deletes]
+        .every(file => contentEquals(actual.get(file), expected.get(file)));
+}
+
 export function snapshotFingerprint(snapshot: ReadonlyMap<string, Uint8Array>): string {
     const hash = createHash('sha256');
     for (const [path, content] of Array.from(snapshot.entries()).sort(([a], [b]) => a.localeCompare(b))) {
@@ -712,12 +721,12 @@ export class RemoteProject {
 
     async applyPushPlan(
         plan: PushPlan,
-        expectedRemoteFingerprint: string,
+        expected: ReadonlyMap<string, Uint8Array>,
         local: ReadonlyMap<string, Uint8Array>,
-    ): Promise<void> {
+    ): Promise<Map<string, Uint8Array>> {
         const freshRemote = await this.readRemoteSnapshot();
-        if (snapshotFingerprint(freshRemote) !== expectedRemoteFingerprint) {
-            throw new Error('Overleaf changed while preparing the push. Pull again before pushing.');
+        if (!pushPathsMatch(plan, freshRemote, expected)) {
+            throw new Error('A file in this commit changed on Overleaf. Pull and resolve it before pushing.');
         }
 
         this.setStatus('pushing', 'Uploading committed snapshot...');
@@ -743,13 +752,14 @@ export class RemoteProject {
             }
         }
         const after = await this.readRemoteSnapshot();
-        if (snapshotFingerprint(after) !== snapshotFingerprint(local)) {
+        if (!pushPathsMatch(plan, after, local)) {
             throw new Error(
-                'Overleaf changed during the push. Uploaded files were kept; fetch/pull to reconcile before pushing again.',
+                'A file in this commit changed during the push. Uploaded files were kept; pull to reconcile before pushing again.',
             );
         }
         await this.settings.updateLastSynced();
         this.setStatus('idle', 'Push complete');
+        return after;
     }
 
     protected isTextFile(filename: string): boolean {
