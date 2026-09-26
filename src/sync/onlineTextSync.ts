@@ -181,7 +181,8 @@ export class OnlineTextSync implements vscode.Disposable {
                 if (!(await vscode.workspace.applyEdit(edit))) mirror.cancel();
                 continue;
             }
-            if (document.isDirty && !(await document.save())) throw new Error(`Cannot autosave ${state.path}.`);
+            if (document.isDirty && !(await document.save()) && document.isDirty)
+                throw new Error(`Cannot autosave ${state.path}.`);
             // New edits or remote updates can arrive while save participants run.
             if (normalizeEditorText(document.getText()) !== state.model.text || document.isDirty) continue;
             return;
