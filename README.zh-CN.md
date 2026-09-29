@@ -4,7 +4,7 @@
 
 > GitLeaf 当前处于开发测试阶段，仅在 Windows 上测试过，macOS 和 Linux 尚未验证。欢迎通过 [Issues](https://github.com/Disapole-Xiao/gitleaf/issues) 反馈问题和建议。
 
-在 VS Code 中使用 Overleaf：将一个 Overleaf 项目关联到你选定的本地文件夹，可以选择类似 Git 的离线工作流，也可以与协作者实时编辑。
+在 VS Code 中使用 Overleaf：将一个 Overleaf 项目关联到你选定的本地文件夹，可以选择类似 Git 的离线工作流，也可以与协作者同步已保存的文件。
 
 GitLeaf 与 Overleaf 没有隶属或官方合作关系。
 
@@ -20,19 +20,20 @@ GitLeaf 与 Overleaf 没有隶属或官方合作关系。
 
 1. `Ctrl+Shift+P` 打开 VS Code 命令面板，运行 **`GitLeaf: Login`**。使用 overleaf.com 时按[提示](https://github.com/overleaf-workshop/Overleaf-Workshop/blob/master/docs/wiki.md#login-with-cookies)粘贴浏览器 Cookie。自建服务器可用邮箱和密码登录。
 2. 运行 **`GitLeaf: Link Folder to Overleaf Project`**，选择项目、本地文件夹，再选择工作模式：
-   - **`Online`**：自动同步，适合实时协作。
+   - **`Online`**：自动同步已保存的文件，适合协作编辑。
    - **`Offline`**：手动提交、拉取和推送，适合 Git 式工作流。
 3. 开始编辑。GitLeaf 会记住这个关联；解除关联可用 **GitLeaf: Unlink Folder**，本地文件不会因此删除。
 
 ## Online 模式
 
-- 保存和编辑时自动同步，可以看到协作者的实时修改。不需要 Commit、Pull 或 Push。
+- 保存文件后，GitLeaf 会上传本地修改；协作者的修改会自动下载到没有未保存内容或冲突的本地文件。不需要 Commit、Pull 或 Push。
+- 如果检测到冲突或异常修改，GitLeaf 会暂停整个项目的 Online 同步。切换到 Offline 解决文件差异后再重新连接。
 - 想自己决定何时发布修改？运行 **GitLeaf: Change Sync Mode**，切换到离线模式。
 
 ## Offline 模式
 
 1. 编辑并保存文件。在 VS Code **源代码管理**的 **Changes** 中点击文件查看差异。
-2. 点击文件旁的 **`+`** 暂存要提交的修改，输入消息，再点击上方 **`✓`**，或在消息框按 **`Ctrl+Enter`** 提交。提交只保存在本地。
+2. 点击文件旁的 **`+`** 暂存要提交的修改，可填写提交说明，再点击上方 **`✓`**，或在消息框按 **`Ctrl+Enter`** 提交。提交只保存在本地。
 3. 点击 GitLeaf 仓库旁的**同步**按钮将自动从 Overleaf 拉取和推送本地提交。也可以从 **…** 菜单分别执行 Pull 和 Push。
 
 常用操作：

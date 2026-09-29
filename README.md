@@ -4,7 +4,7 @@
 
 > GitLeaf is under development and testing. It has only been tested on Windows; macOS and Linux have not yet been verified. Bug reports and suggestions are welcome via [Issues](https://github.com/Disapole-Xiao/gitleaf/issues).
 
-Use Overleaf in VS Code: link an Overleaf project to a local folder, then choose a Git-style offline workflow or edit with collaborators in real time.
+Use Overleaf in VS Code: link an Overleaf project to a local folder, then choose a Git-style offline workflow or keep saved files in sync with collaborators.
 
 GitLeaf is not affiliated with or endorsed by Overleaf.
 
@@ -20,19 +20,20 @@ GitLeaf is not affiliated with or endorsed by Overleaf.
 
 1. Press `Ctrl+Shift+P` to open the Command Palette and run **`GitLeaf: Login`**. For overleaf.com, follow these [instructions](https://github.com/overleaf-workshop/Overleaf-Workshop/blob/master/docs/wiki.md#login-with-cookies) to paste your browser cookie. For a self-hosted server, sign in with your email and password.
 2. Run **`GitLeaf: Link Folder to Overleaf Project`**. Choose a project, a local folder, and a mode:
-   - **`Online`**: automatic syncing for real-time collaboration.
+   - **`Online`**: automatically sync saved files for collaboration.
    - **`Offline`**: manual commits, pulls, and pushes for a Git-style workflow.
 3. Start editing. GitLeaf remembers the link. **GitLeaf: Unlink Folder** removes the link without deleting your local files.
 
 ## Online mode
 
-- Edits sync automatically, and you can see collaborators' changes. You do not need Commit, Pull, or Push.
+- Save a file to upload your edits. Collaborator changes download automatically when the local file has no unsaved or conflicting changes. You do not need Commit, Pull, or Push.
+- If GitLeaf detects conflicting or abnormal changes, it pauses Online sync for the project. Switch to Offline to reconcile the files before reconnecting.
 - Want to control when changes are published? Run **GitLeaf: Change Sync Mode** and switch to Offline.
 
 ## Offline mode
 
 1. Edit and save your files. In VS Code **Source Control**, click a file under **Changes** to inspect its diff.
-2. Click the **`+`** beside a file to stage it. Enter a message, then click the top **`✓`** or press **`Ctrl+Enter`** in the message box to commit. The commit stays local.
+2. Click the **`+`** beside a file to stage it. Optionally enter a message, then click the top **`✓`** or press **`Ctrl+Enter`** in the message box to commit. The commit stays local.
 3. Click the **sync** button beside the GitLeaf repository to pull from Overleaf and push your local commits. You can also run Pull and Push separately from the **…** menu.
 
 Common actions:

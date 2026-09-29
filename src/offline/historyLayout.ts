@@ -60,7 +60,7 @@ export function layoutHistory(nodes: HistoryCommitNode[], position: HistoryPosit
     const rows: GraphRow[] = nodes.map(node => {
         const remoteLabels = node.kind === 'remote' ? [...(node.update.labels || [])]
             .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')) : [];
-        const messages = remoteLabels.map(label => commitMessage(label.comment)).filter((message): message is string => message !== undefined);
+        const messages = remoteLabels.map(label => commitMessage(label.comment)).filter((message): message is string => !!message);
         const version = node.kind === 'remote' ? node.update.toV : undefined;
         const pointers: string[] = [];
         if (node === local[0] || !local.length && node === baseNode) pointers.push('LOCAL');

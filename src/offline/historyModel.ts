@@ -13,7 +13,7 @@ export interface HistoryPosition { baseVersion?: number }
 
 export type HistoryCommitNode =
     | { kind: 'local'; id: string; commit: CommitInfo; labels?: string[]; pending?: boolean }
-    | { kind: 'remote'; id: string; update: HistoryUpdate; commit?: CommitInfo; published?: boolean };
+    | { kind: 'remote'; id: string; update: HistoryUpdate; commit?: CommitInfo; published?: boolean; mixed?: boolean };
 export type HistoryNode = HistoryCommitNode
     | { kind: 'file'; id: string; parent: HistoryCommitNode; file: CommitFile }
     | { kind: 'more'; source: 'local' | 'remote' };
@@ -97,7 +97,8 @@ export class HistoryModel implements vscode.Disposable {
             const { fromV, toV } = node.update;
             const receipt = this.receipts.published.find(item => item.fromV === fromV && item.toV === toV);
             return { ...node, commit: receipt?.commit,
-                published: this.receipts.published.some(item => item.fromV <= fromV && item.toV >= toV) };
+                published: this.receipts.published.some(item => item.fromV <= fromV && item.toV >= toV),
+                mixed: this.receipts.published.some(item => item.mixed && item.fromV < toV && item.toV > fromV) };
         });
     }
 

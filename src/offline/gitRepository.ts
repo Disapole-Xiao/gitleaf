@@ -269,12 +269,12 @@ export class GitRepository {
 
     async commit(message: string): Promise<string | undefined> {
         if (await this.isRebasing()) {
-            await this.run(['rebase', await this.isClean() ? '--skip' : '--continue'], { env: { GIT_EDITOR: 'true' } });
+            await this.continuePull(message);
             return this.head();
         }
         const staged = await this.run(['diff', '--cached', '--quiet'], { allowFailure: true });
         if (staged.exitCode === 0 && !(await this.revParse('MERGE_HEAD'))) return undefined;
-        await this.run(['commit', '-m', message]);
+        await this.run(['commit', '--allow-empty-message', '-m', message]);
         return this.head();
     }
 
@@ -378,6 +378,29 @@ export class GitRepository {
         if (result.exitCode !== 0 && !changes.some(change => change.kind === 'conflict')) {
             throw new Error(result.stderr.toString('utf8').trim() || 'Git pull rebase failed.');
         }
+        return changes;
+    }
+
+    async continuePull(message = 'Resolve pull conflicts'): Promise<WorkingChange[]> {
+        if (!(await this.isRebasing())) throw new OperationBlockedError('No pull is waiting to continue.');
+        if ((await this.status()).some(change => change.kind === 'conflict'))
+            throw new OperationBlockedError('Resolve the current conflicts before continuing the pull.');
+        const unstaged = (await this.run(['diff', '--name-only', '-z'])).stdout.toString('utf8').split('\0').filter(Boolean);
+        if (unstaged.length)
+            throw new OperationBlockedError(`Stage the remaining edited files before continuing Pull: ${unstaged.join(', ')}`);
+        const staged = await this.run(['diff', '--cached', '--quiet'], { allowFailure: true });
+        const action = staged.exitCode === 0 ? '--skip' : '--continue';
+        if (action === '--continue') {
+            const messageFile = path.join(this.gitDir, 'rebase-merge', 'message');
+            const original = await fs.readFile(messageFile, 'utf8');
+            if (!original.split(/\r?\n/).some(line => line.trim() && !line.trimStart().startsWith('#')))
+                await fs.writeFile(messageFile, message.trim() || 'Resolve pull conflicts');
+        }
+        const result = await this.run(['rebase', action], { allowFailure: true, env: { GIT_EDITOR: 'true' } });
+        const changes = await this.status();
+        if (result.exitCode !== 0 && !changes.some(change => change.kind === 'conflict'))
+            throw new Error(result.stderr.toString('utf8').trim()
+                || result.stdout.toString('utf8').trim() || 'Git pull rebase could not continue.');
         return changes;
     }
 

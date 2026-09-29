@@ -309,7 +309,7 @@ async function initializeSync(
             await syncEngine.pullAll();
             log('Auto-pull complete');
 
-            // Join all docs to receive real-time OT updates
+            // Join all docs to receive remote change notifications.
             await syncEngine.joinAllDocsForWatching();
             log('Watching for remote changes');
 
@@ -646,7 +646,7 @@ async function cmdLinkFolder(context: vscode.ExtensionContext) {
     const modeSelection = await vscode.window.showQuickPick([
         {
             label: '$(radio-tower) Online',
-            description: 'Live editing, automatic synchronization, collaborator cursors',
+            description: 'Sync saved files automatically and show collaborator cursors',
             mode: 'online' as const,
         },
         {
@@ -747,7 +747,7 @@ async function cmdSyncNow() {
         }
         return;
     }
-    // Online mode already pushes edits as they are made; pull any pending remote updates.
+    // Online mode pushes saved files automatically; refresh remote files now.
     await cmdPullFromOverleaf();
 }
 
@@ -761,57 +761,63 @@ async function cmdChangeMode(context: vscode.ExtensionContext): Promise<void> {
     }
 
     const selected = await vscode.window.showQuickPick([
-        { label: '$(radio-tower) Online', description: 'Automatic live sync and collaborator cursors', mode: 'online' as const },
+        { label: '$(radio-tower) Online', description: 'Sync saved files automatically and show collaborator cursors', mode: 'online' as const },
         { label: '$(source-control) Offline', description: 'Manual commit, pull and push', mode: 'offline' as const },
     ], { title: `Change mode (currently ${settings.mode})` });
     if (!selected || selected.mode === settings.mode) return;
 
     const confirm = await vscode.window.showWarningMessage(
         selected.mode === 'online'
-            ? 'Online mode will begin synchronizing editor changes immediately.'
+            ? 'Online mode will synchronize files when they are saved.'
             : 'Offline mode will stop automatic synchronization and use explicit GitLeaf commits.',
         { modal: true },
         `Switch to ${selected.mode}`,
     );
     if (confirm !== `Switch to ${selected.mode}`) return;
 
-    await offlineOperation;
-    if (changingMode) return;
-    changingMode = true;
-    try {
-        if (selected.mode === 'online') {
-            if (!offlineController) throw new Error('Offline repository is not ready.');
-            await offlineController.prepareOnline(true);
-        } else {
-            if (!syncEngine) throw new Error('Online connection is not ready.');
-            const repository = new GitRepository(settingsManager.getWorkspaceFolder().fsPath);
-            await repository.initialize();
-            await repository.assertSettled();
-            try {
-                const snapshot = await syncEngine.finishOnline();
-                syncEngine = undefined;
-                await repository.acceptOnlineSnapshot(snapshot);
-            } catch (error) {
-                if (syncEngine?.hasPendingFileOperations) throw error;
-                const keep = await vscode.window.showWarningMessage(
-                    `Cannot confirm a clean online snapshot: ${errorMessage(error)}\nEnter Offline with local changes preserved against the last trusted baseline?`,
-                    { modal: true }, 'Keep changes and enter Offline');
-                if (!keep) throw error;
-                await syncEngine?.close();
-                syncEngine = undefined;
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: `GitLeaf: Switching to ${selected.mode === 'online' ? 'Online' : 'Offline'}...`,
+        cancellable: false,
+    }, async () => {
+        await offlineOperation;
+        if (changingMode) return;
+        changingMode = true;
+        try {
+            if (selected.mode === 'online') {
+                if (!offlineController) throw new Error('Offline repository is not ready.');
+                await offlineController.prepareOnline(true);
+            } else {
+                if (!syncEngine) throw new Error('Online connection is not ready.');
+                const repository = new GitRepository(settingsManager.getWorkspaceFolder().fsPath);
+                await repository.initialize();
+                await repository.assertSettled();
+                try {
+                    const snapshot = await syncEngine.finishOnline();
+                    syncEngine = undefined;
+                    await repository.acceptOnlineSnapshot(snapshot);
+                } catch (error) {
+                    if (syncEngine?.hasPendingFileOperations) throw error;
+                    const keep = await vscode.window.showWarningMessage(
+                        `Cannot confirm a clean online snapshot: ${errorMessage(error)}\nEnter Offline with local changes preserved against the last trusted baseline?`,
+                        { modal: true }, 'Keep changes and enter Offline');
+                    if (!keep) throw error;
+                    await syncEngine?.close();
+                    syncEngine = undefined;
+                }
             }
-        }
-        await settingsManager.update({ mode: selected.mode, autoSync: selected.mode === 'online' });
-        try { await initializeSync(context, settingsManager, false, selected.mode === 'online'); }
-        catch (error) {
-            // A failed online start cannot leave an Online label or a socket
-            // that later publishes changes without another explicit switch.
-            await syncEngine?.close(); syncEngine = undefined;
-            await settingsManager.update({ mode: 'offline', autoSync: false });
-            await initializeSync(context, settingsManager);
-            throw error;
-        }
-    } finally { changingMode = false; }
+            await settingsManager.update({ mode: selected.mode, autoSync: selected.mode === 'online' });
+            try { await initializeSync(context, settingsManager, false, selected.mode === 'online'); }
+            catch (error) {
+                // A failed online start cannot leave an Online label or a socket
+                // that later publishes changes without another explicit switch.
+                await syncEngine?.close(); syncEngine = undefined;
+                await settingsManager.update({ mode: 'offline', autoSync: false });
+                await initializeSync(context, settingsManager);
+                throw error;
+            }
+        } finally { changingMode = false; }
+    });
 }
 
 /**
@@ -882,7 +888,7 @@ async function cmdPushToOverleaf() {
         return;
     }
 
-    vscode.window.showInformationMessage('GitLeaf: Push is automatic via real-time sync');
+    vscode.window.showInformationMessage('GitLeaf: Saved files are pushed automatically in Online mode');
 }
 
 /**
@@ -1192,6 +1198,7 @@ async function cmdReconnect() {
         log('Reconnected to Overleaf');
 
         await syncEngine.pullAll();
+        await syncEngine.joinAllDocsForWatching();
         vscode.window.showInformationMessage(`GitLeaf: Reconnected to "${projectSettings.projectName}"`);
     } catch (error) {
         log(`Failed to reconnect: ${error}`);

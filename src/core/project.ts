@@ -5,7 +5,7 @@ import { commitLabel } from '../offline/commitLabel';
 import { OperationBlockedError } from '../offline/operationBlocked';
 import { CredentialStore } from './credentials';
 import { ProjectStore } from './projectStore';
-import { RemoteProject, snapshotFingerprint, SyncStatusEvent } from './remoteProject';
+import { RemoteProject, pushPathsMatch, snapshotFingerprint, SyncStatusEvent } from './remoteProject';
 import { withProjectLock } from './projectLock';
 import { assertSavedEditors } from './editorState';
 import { writeJson } from './projectStore';
@@ -132,7 +132,6 @@ export class GitLeafProject {
                         return { unstaged: true };
                     case 'commit': {
                         const message = command.message.replace(/\s+/g, ' ').trim();
-                        if (!message) throw new OperationBlockedError('Commit message is required.');
                         const credential = await this.credentials.getCredential(settings.serverUrl);
                         if (!credential) throw new OperationBlockedError('Log in to Overleaf first.');
                         await this.repository.setAuthor(credential.userName, credential.userEmail);
@@ -145,9 +144,7 @@ export class GitLeafProject {
                     case 'push':
                         return await this.push();
                     case 'fetch':
-                        await this.withRemote(async (remote) =>
-                            this.repository.fetchRemoteSnapshot(await remote.readRemoteSnapshot()),
-                        );
+                        await this.repository.fetchRemoteSnapshot((await this.withRemote(() => this.fixedRemoteSnapshot())).snapshot);
                         return { fetched: true };
                     case 'prepareOnline':
                         return await this.prepareOnline();
@@ -288,18 +285,21 @@ export class GitLeafProject {
             this.options.status?.({ status: 'idle', message: 'Offline · manual sync' });
         }
     }
+    private async fixedRemoteSnapshot(): Promise<{ version: number; snapshot: Map<string, Uint8Array> }> {
+        const version = await this.history.currentVersion(true);
+        const archive = await this.history.snapshot(version);
+        const ignore = new IgnoreParser(this.store.root, this.store.getSettings());
+        await ignore.load();
+        const snapshot = new Map([...archive].filter(([file]) => !ignore.shouldIgnore(file)));
+        return { version, snapshot };
+    }
     private async clone(): Promise<void> {
-        await this.withRemote(async (remote) => {
-            const beforeV = await this.history.currentVersion(true);
-            const snapshot = await remote.readRemoteSnapshot();
-            const afterV = await this.history.currentVersion(true);
-            if (beforeV !== afterV) throw new OperationBlockedError('Overleaf changed while reading the initial snapshot. Retry Clone.');
-            await this.checkEditors();
-            await this.repository.initializeFromRemote(snapshot);
-            const receipts = await this.repository.publications.read();
-            receipts.integrated = { version: afterV, gitHash: (await this.repository.remoteHead())! };
-            await this.repository.publications.write(receipts);
-        });
+        const { version, snapshot } = await this.withRemote(() => this.fixedRemoteSnapshot());
+        await this.checkEditors();
+        await this.repository.initializeFromRemote(snapshot);
+        const receipts = await this.repository.publications.read();
+        receipts.integrated = { version, gitHash: (await this.repository.remoteHead())! };
+        await this.repository.publications.write(receipts);
         await this.store.updateLastSynced();
     }
     private async pull(): Promise<{ conflicts: string[] }> {
@@ -307,38 +307,36 @@ export class GitLeafProject {
             await this.clone();
             return { conflicts: [] };
         }
-        if (await this.repository.isRebasing())
-            throw new OperationBlockedError('Finish or abort the current pull before pulling again.');
+        if (await this.repository.isRebasing()) {
+            const changes = await this.repository.continuePull();
+            await this.recordPullProgress();
+            const conflicts = changes.filter(change => change.kind === 'conflict').map(change => change.path);
+            if (conflicts.length) return { conflicts };
+        }
         const current = await this.repository.status();
         if (current.some((change) => change.kind === 'conflict'))
             throw new OperationBlockedError('Resolve the current conflicts before pulling.');
         await this.checkEditors();
-        const conflicts = await this.withRemote(async (remote) => {
-            const beforeV = await this.history.currentVersion(true);
-            const snapshot = await remote.readRemoteSnapshot(),
-                receipts = await this.repository.publications.read();
-            const afterV = await this.history.currentVersion(true);
-            if (beforeV !== afterV) throw new OperationBlockedError('Overleaf changed while reading the snapshot. Retry Pull.');
-            await this.checkEditors();
-            const gitHash = await this.repository.fetchRemoteSnapshot(snapshot);
-            await this.checkEditors();
-            receipts.pendingPull = { version: afterV, gitHash };
-            await this.repository.publications.write(receipts);
-            let changes;
-            try { changes = await this.repository.rebaseRemote(); }
-            catch (error) {
-                if (!(await this.repository.isRebasing())) {
-                    delete receipts.pendingPull;
-                    await this.repository.publications.write(receipts);
-                }
-                throw error;
+        const { version, snapshot } = await this.withRemote(() => this.fixedRemoteSnapshot());
+        const receipts = await this.repository.publications.read();
+        await this.checkEditors();
+        const gitHash = await this.repository.fetchRemoteSnapshot(snapshot);
+        await this.checkEditors();
+        receipts.pendingPull = { version, gitHash };
+        await this.repository.publications.write(receipts);
+        let changes;
+        try { changes = await this.repository.rebaseRemote(); }
+        catch (error) {
+            if (!(await this.repository.isRebasing())) {
+                delete receipts.pendingPull;
+                await this.repository.publications.write(receipts);
             }
-            const conflicts = changes.filter((change) => change.kind === 'conflict');
-            await this.recordPullProgress();
-            return conflicts.map((change) => change.path);
-        });
+            throw error;
+        }
+        const conflicts = changes.filter((change) => change.kind === 'conflict');
+        await this.recordPullProgress();
         await this.store.updateLastSynced();
-        return { conflicts };
+        return { conflicts: conflicts.map((change) => change.path) };
     }
     private async recordPullProgress(): Promise<void> {
         const receipts = await this.repository.publications.read();
@@ -444,24 +442,25 @@ export class GitLeafProject {
                 const pending = receipts.pending,
                     version = await this.history.currentVersion(true);
                 const expected = await this.repository.committedSnapshot(pending.commit.hash),
+                    parent = await this.repository.committedSnapshot(pending.commit.parents[0]),
+                    plan = await remote.createPushPlan(parent, expected),
                     actual = await remote.readRemoteSnapshot();
                 if (
                     version <= pending.fromV ||
-                    snapshotFingerprint(actual) !== snapshotFingerprint(expected) ||
-                    version !== (await this.history.currentVersion())
+                    !pushPathsMatch(plan, actual, expected)
                 )
                     throw new OperationBlockedError(
                         'The interrupted push does not match Overleaf. Pull to reconcile before another push or revert.',
                     );
                 await this.history.label(version, commitLabel(pending.commit.subject));
-                receipts.published.push({ ...pending, toV: version });
+                const mixed = snapshotFingerprint(actual) !== snapshotFingerprint(expected);
+                receipts.published.push({ ...pending, toV: version, ...(mixed ? { mixed } : {}) });
                 await this.repository.markRemoteAsHead(pending.commit.hash);
-                receipts.integrated = { version, gitHash: pending.commit.hash };
+                if (!mixed)
+                    receipts.integrated = { version, gitHash: pending.commit.hash };
                 delete receipts.pending;
                 await this.repository.publications.write(receipts);
             }
-            let snapshot = await remote.readRemoteSnapshot();
-            await this.repository.fetchRemoteSnapshot(snapshot);
             if (!(await this.repository.isRemoteAncestorOfHead()))
                 throw new OperationBlockedError('Overleaf has new changes. Pull and resolve them before pushing.');
             const commits = (await this.repository.unpublished(100000)).reverse();
@@ -469,34 +468,38 @@ export class GitLeafProject {
             const snapshots = await Promise.all(
                 commits.map((commit) => this.repository.committedSnapshot(commit.hash)),
             );
+            const base = await this.repository.committedSnapshot(commits[0].parents[0]);
             const plans = await Promise.all(
-                snapshots.map((value, index) => remote.createPushPlan(index ? snapshots[index - 1] : snapshot, value)),
+                snapshots.map((value, index) => remote.createPushPlan(index ? snapshots[index - 1] : base, value)),
             );
             let fromV = await this.history.currentVersion(true);
             await this.history.ensureBoundary(fromV);
             for (let index = 0; index < commits.length; index++) {
                 const commit = commits[index];
+                const parent = index ? snapshots[index - 1] : base;
+                if (!pushPathsMatch(plans[index], await remote.readRemoteSnapshot(), parent))
+                    throw new OperationBlockedError('A file in this commit changed on Overleaf. Pull and resolve it before pushing.');
                 receipts.pending = { commit, fromV };
                 await this.repository.publications.write(receipts);
-                await remote.applyPushPlan(plans[index], snapshotFingerprint(snapshot), snapshots[index]);
+                await remote.applyPushPlan(plans[index], parent, snapshots[index]);
                 const toV = await this.history.currentVersion(true),
                     actual = await remote.readRemoteSnapshot();
                 if (
                     toV <= fromV ||
-                    snapshotFingerprint(actual) !== snapshotFingerprint(snapshots[index]) ||
-                    toV !== (await this.history.currentVersion())
+                    !pushPathsMatch(plans[index], actual, snapshots[index])
                 )
                     throw new Error(
-                        'Overleaf changed while confirming the version. Push paused; its pending receipt protects your commit.',
+                        'A pushed file changed while confirming the version. Push paused; its pending receipt protects your commit.',
                     );
                 await this.history.label(toV, commitLabel(commit.subject));
-                receipts.published.push({ commit, fromV, toV });
+                const mixed = snapshotFingerprint(actual) !== snapshotFingerprint(snapshots[index]);
+                receipts.published.push({ commit, fromV, toV, ...(mixed ? { mixed } : {}) });
                 await this.repository.markRemoteAsHead(commit.hash);
-                receipts.integrated = { version: toV, gitHash: commit.hash };
+                if (!mixed)
+                    receipts.integrated = { version: toV, gitHash: commit.hash };
                 delete receipts.pending;
                 await this.repository.publications.write(receipts);
                 fromV = toV;
-                snapshot = actual;
             }
             return { pushed: commits.length };
         });

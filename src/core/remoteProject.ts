@@ -2,21 +2,10 @@ import { promises as fs } from 'fs';
 import { EventEmitter } from 'events';
 import { createHash } from 'crypto';
 import { BaseAPI, ProjectEntity, FileEntity, FolderEntity } from '../api/base';
-import { SocketIOAPI, DocumentUpdate } from '../api/socketio';
-import { diffText } from '../sync/textSession';
+import { SocketIOAPI } from '../api/socketio';
+import { diffText, normalizeDocumentText } from '../sync/textOperations';
 import { ProjectStore } from './projectStore';
 import { IgnoreParser } from '../sync/ignoreParser';
-/** Editor buffers are an adapter, never a VS Code dependency of the transport. */
-export interface OnlineDocuments {
-    readonly revision: number;
-    open(id: string, path: string, local?: boolean): Promise<void>;
-    flush(): Promise<void>;
-    has(id: string): boolean;
-    text(id: string): string | undefined;
-    remove(id: string): void;
-    receive(update: DocumentUpdate): void;
-    dispose(): void;
-}
 interface FileCache {
     hash: number;
     timestamp: number;
@@ -35,6 +24,15 @@ export interface PushPlan {
     creates: string[];
     updates: string[];
     deletes: string[];
+}
+
+export function pushPathsMatch(
+    plan: PushPlan,
+    actual: ReadonlyMap<string, Uint8Array>,
+    expected: ReadonlyMap<string, Uint8Array>,
+): boolean {
+    return [...plan.creates, ...plan.updates, ...plan.deletes]
+        .every(file => contentEquals(actual.get(file), expected.get(file)));
 }
 
 export function snapshotFingerprint(snapshot: ReadonlyMap<string, Uint8Array>): string {
@@ -94,7 +92,6 @@ export interface FileTreeEntry {
 /** Shared tested Overleaf protocol; both UI adapters use these same mutations. */
 export class RemoteProject {
     protected _status: SyncStatus = 'disconnected';
-    protected onlineText?: OnlineDocuments;
     private readonly events = new EventEmitter();
     readonly onStatusChange = (listener: (event: SyncStatusEvent) => void) => {
         this.events.on('status', listener);
@@ -116,6 +113,7 @@ export class RemoteProject {
         this._status = status;
         this.events.emit('status', { status, message, file, authError });
     }
+    protected assertRemoteWriteAllowed(): void {}
     protected configureSocket(_readOnly: boolean): void {
         // Short-lived offline connections observe metadata only. Never
         // touch the worktree in response to a server event in offline mode.
@@ -361,20 +359,18 @@ export class RemoteProject {
         newContent: Uint8Array,
         expectedContent?: Uint8Array,
     ): Promise<boolean> {
+        this.assertRemoteWriteAllowed();
         if (!this.socket) throw new Error('Document connection unavailable.');
-        if (this.onlineText) {
-            // Disk watcher echoes must never replace the live OT snapshot.
-            await this.onlineText.open(docId, path, true);
-            await this.onlineText.flush();
-            return true;
-        }
-        // Explicit offline push: submit once, without stale-snapshot retries.
+        // Read the current server document before each file-level push.
         const { lines, version } = await this.socket.joinDoc(docId);
-        if (expectedContent && lines.join('\n') !== new TextDecoder().decode(expectedContent)) {
+        if (expectedContent && lines.join('\n') !== normalizeDocumentText(new TextDecoder().decode(expectedContent))) {
             throw new Error(`${path} changed on Overleaf during the push. Fetch and pull before retrying.`);
         }
-        const op = diffText(lines.join('\n'), new TextDecoder().decode(newContent));
-        if (op.length) await this.socket.applyOtUpdate(docId, { doc: docId, op, v: version });
+        const op = diffText(lines.join('\n'), normalizeDocumentText(new TextDecoder().decode(newContent)));
+        if (op.length) {
+            this.assertRemoteWriteAllowed();
+            await this.socket.applyOtUpdate(docId, { doc: docId, op, v: version });
+        }
         this.joinedDocs.add(docId);
         return op.length > 0;
     }
@@ -415,6 +411,7 @@ export class RemoteProject {
         name: string,
         content: Uint8Array,
     ): Promise<void> {
+        this.assertRemoteWriteAllowed();
         // Set this before creating the document so its socket acknowledgement
         // is recognized as an echo of the local operation.
         this.baseContent.set(relativePath, content);
@@ -448,6 +445,7 @@ export class RemoteProject {
     }
 
     protected async deleteRemoteEntry(entry: FileTreeEntry, preserveLocal = false): Promise<void> {
+        this.assertRemoteWriteAllowed();
         const projectSettings = this.settings.getSettings()!;
         if (preserveLocal) {
             this.suppressedRemoteDeletes.add(entry.id);
@@ -462,7 +460,6 @@ export class RemoteProject {
         }
 
         this.fileTree.delete(entry.id);
-        this.onlineText?.remove(entry.id);
         this.suppressedRemoteRenames.delete(entry.id);
         if (this.fileTreeByPath.get(entry.path)?.id === entry.id) {
             this.fileTreeByPath.delete(entry.path);
@@ -474,6 +471,7 @@ export class RemoteProject {
     }
 
     protected async renameRemoteEntry(entry: FileTreeEntry, name: string, action: string): Promise<void> {
+        this.assertRemoteWriteAllowed();
         const projectSettings = this.settings.getSettings()!;
         this.suppressRemoteRename(entry.id, name);
         try {
@@ -486,6 +484,7 @@ export class RemoteProject {
     }
 
     protected async replaceRemoteFile(entry: FileTreeEntry, content: Uint8Array): Promise<void> {
+        this.assertRemoteWriteAllowed();
         // Socket rename/move acknowledgements mutate the live tree entry while
         // HTTP requests are pending. Keep the upload and rollback target stable.
         entry = { ...entry };
@@ -507,6 +506,7 @@ export class RemoteProject {
             await this.renameRemoteEntry(entry, temporaryName, `Prepare replacement for ${entry.path}`);
             renamedOriginal = true;
 
+            this.assertRemoteWriteAllowed();
             const result = await this.api.uploadFile(projectSettings.projectId, entry.parentId, entry.name, content);
             ensureApiSuccess(result, `Upload ${entry.path}`);
             uploadedReplacement = true;
@@ -600,6 +600,7 @@ export class RemoteProject {
             } else {
                 // Folder doesn't exist, create it
                 debugLog('Creating missing parent folder:', folderPath);
+                this.assertRemoteWriteAllowed();
                 const result = await this.api.addFolder(projectSettings.projectId, currentParentId, segment);
 
                 if (result.type !== 'success' || !result.folder) {
@@ -629,6 +630,7 @@ export class RemoteProject {
     }
 
     protected async uploadLocalFile(relativePath: string, committedContent?: Uint8Array): Promise<void> {
+        this.assertRemoteWriteAllowed();
         const projectSettings = this.settings.getSettings()!;
         const content = committedContent || (await fs.readFile(this.settings.file(relativePath)));
 
@@ -644,6 +646,7 @@ export class RemoteProject {
             await this.createTextDocumentWithContent(projectSettings.projectId, parentId, relativePath, name, content);
         } else {
             this.baseContent.set(relativePath, content);
+            this.assertRemoteWriteAllowed();
             const result = await this.api.uploadFile(projectSettings.projectId, parentId, name, content);
             ensureApiSuccess(result, `Upload ${relativePath}`);
             if (!this.trackUploadedEntity(result, parentId, name, relativePath)) {
@@ -668,13 +671,10 @@ export class RemoteProject {
 
             let content: Uint8Array;
             if (entry.type === 'doc') {
-                if (this.onlineText?.has(entry.id)) {
-                    await this.onlineText.flush();
-                    content = Buffer.from(this.onlineText.text(entry.id)!);
-                } else if (this.socket) {
+                if (this.socket) {
                     const joined = await this.socket.joinDoc(entry.id);
                     content = new TextEncoder().encode(joined.lines.join('\n'));
-                    await this.socket.leaveDoc(entry.id);
+                    if (!this.joinedDocs.has(entry.id)) await this.socket.leaveDoc(entry.id);
                 } else {
                     const result = await this.api.getDocContent(projectId, entry.id);
                     ensureApiSuccess(result, `Download ${entry.path}`);
@@ -712,12 +712,12 @@ export class RemoteProject {
 
     async applyPushPlan(
         plan: PushPlan,
-        expectedRemoteFingerprint: string,
+        expected: ReadonlyMap<string, Uint8Array>,
         local: ReadonlyMap<string, Uint8Array>,
-    ): Promise<void> {
+    ): Promise<Map<string, Uint8Array>> {
         const freshRemote = await this.readRemoteSnapshot();
-        if (snapshotFingerprint(freshRemote) !== expectedRemoteFingerprint) {
-            throw new Error('Overleaf changed while preparing the push. Pull again before pushing.');
+        if (!pushPathsMatch(plan, freshRemote, expected)) {
+            throw new Error('A file in this commit changed on Overleaf. Pull and resolve it before pushing.');
         }
 
         this.setStatus('pushing', 'Uploading committed snapshot...');
@@ -743,13 +743,14 @@ export class RemoteProject {
             }
         }
         const after = await this.readRemoteSnapshot();
-        if (snapshotFingerprint(after) !== snapshotFingerprint(local)) {
+        if (!pushPathsMatch(plan, after, local)) {
             throw new Error(
-                'Overleaf changed during the push. Uploaded files were kept; fetch/pull to reconcile before pushing again.',
+                'A file in this commit changed during the push. Uploaded files were kept; pull to reconcile before pushing again.',
             );
         }
         await this.settings.updateLastSynced();
         this.setStatus('idle', 'Push complete');
+        return after;
     }
 
     protected isTextFile(filename: string): boolean {
@@ -784,8 +785,6 @@ export class RemoteProject {
         return this.fileTree;
     }
     disconnect(): void {
-        this.onlineText?.dispose();
-        this.onlineText = undefined;
         this.socket?.disconnect();
         this.socket = undefined;
         this.setStatus('disconnected');

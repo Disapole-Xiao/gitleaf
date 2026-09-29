@@ -26,7 +26,7 @@ link --project ID [--server URL]           Link -C folder and download once
 status                                    Staged/unstaged files and last fetched state
 add <paths...> | add --all                 Stage files (same index as VS Code)
 unstage <paths...> | unstage --all         Return staged edits to Changes
-commit -m MESSAGE                         Commit staged changes only
+commit [-m MESSAGE]                       Commit staged changes only
 diff [--staged] [--word] [--commit HASH]    Git patch or word-level diff
 fetch | pull | push                       Explicit Overleaf synchronization
 offline                                   Leave a detached Online mode; preserve files/baseline
@@ -271,7 +271,7 @@ export async function runCli(argv: string[]): Promise<void> {
             request = { type: command, paths: paths() };
             break;
         case 'commit':
-            request = { type: 'commit', message: requireValue(values.message, '-m MESSAGE') };
+            request = { type: 'commit', message: values.message ?? '' };
             break;
         case 'diff':
             request = {

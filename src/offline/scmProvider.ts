@@ -99,7 +99,7 @@ export class OfflineScmProvider implements vscode.Disposable {
     ) {
         const rootUri = vscode.Uri.file(repository.root);
         this.sourceControl = vscode.scm.createSourceControl('gitleaf', 'GitLeaf', rootUri);
-        this.sourceControl.inputBox.placeholder = 'Commit message (Ctrl+Enter to commit)';
+        this.sourceControl.inputBox.placeholder = 'Commit message optional (Ctrl+Enter to commit)';
         this.sourceControl.acceptInputCommand = { command: COMMANDS.COMMIT, title: 'Commit' };
         this.sourceControl.quickDiffProvider = {
             provideOriginalResource: uri => {
