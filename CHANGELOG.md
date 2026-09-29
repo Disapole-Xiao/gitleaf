@@ -2,6 +2,26 @@
 
 Only versions released on the Visual Studio Marketplace are listed here.
 
+## 1.1.2 — 2026-09-29
+
+### New Features
+
+- Online text synchronization now uploads local changes when a file is saved and refreshes clean local files from the latest Overleaf document after collaborator edits. Save your changes before expecting them on Overleaf.
+- Show progress while switching between Online and Offline modes.
+- Allow Offline commits without a message and keep their Overleaf history entries distinct.
+
+### Improvements
+
+- Fetch and Pull use a fixed Overleaf history version, so active collaborator edits do not repeatedly invalidate a download.
+- Push checks the files changed by each local commit, allowing unrelated collaborator edits while stopping if those same files changed on Overleaf.
+
+### Fixes
+
+- Prevent remote editor updates from being sent back to Overleaf repeatedly, which could cause an Online sync loop.
+- Pause Online sync for the entire project when local and remote edits conflict, an incoming update encounters unsaved editor changes, a document lacks a confirmed sync baseline, text grows unexpectedly, or the connection fails. Further remote writes remain blocked until reconnection.
+- Keep conflict resolution usable while a Pull notification is open, continue resolved rebases on the next Pull or sync, and identify unstaged files that prevent continuation.
+- Retry transient Windows file-access errors while atomically replacing the history cache.
+
 ## 1.1.1 — 2026-09-25
 
 ### Fixes
