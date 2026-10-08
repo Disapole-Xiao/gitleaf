@@ -27,7 +27,14 @@ function verifyVsix(entries, target, expected) {
     }
     const names = Object.keys(entries);
     const nativePrefix = `extension/node_modules/@napi-rs/${nativePackages[target]}/`;
-    assert(names.some(name => name.startsWith(nativePrefix) && name.endsWith('.node')), 'Native keyring binary is missing.');
+    const native = names.find(name => name.startsWith(nativePrefix) && name.endsWith('.node'));
+    assert(native, 'Native keyring binary is missing.');
+    if (target === 'linux-x64') {
+        assert(entries[native].length > 500_000, 'Native keyring binary is incomplete.');
+        const helper = entries['extension/bin/keyring-session'];
+        assert(helper && helper.length > 1000, 'Linux keyring session helper is missing.');
+        assert.equal(Buffer.from(helper.subarray(0, 4)).toString('hex'), '7f454c46', 'Invalid Linux keyring session helper.');
+    }
     for (const name of names) {
         assert(!/^extension\/(?:docs\/|src\/|\.github\/|out\/test\/|AGENTS\.md$|scripts\/test-|build\/|coverage\/|output\/|\.cache\/)/.test(name), `Private or development-only file included: ${name}`);
         assert(!/(?:^|\/)(?:\.gitleaf(?:\/|ignore$)|\.env(?:[./]|$))|\.(?:pem|p12|pfx|key|sqlite|db)$/i.test(name), `Local data or credential file included: ${name}`);
