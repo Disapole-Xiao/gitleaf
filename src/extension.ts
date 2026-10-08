@@ -4,6 +4,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { COMMANDS, EXTENSION_NAME, STATUS_BAR_PRIORITY, CONFIG_DIR, IGNORE_FILE } from './consts';
 import { Credentials, login, projects } from './core/credentials';
 import { EditorState } from './utils/editorState';
@@ -518,11 +519,11 @@ async function cmdLogin() {
 
     let secret: { cookies: string } | { email: string; password: string };
     if (isOfficialServer) {
-        // Show help option before asking for cookies
+        // The first notification action is the primary button.
         const helpChoice = await vscode.window.showInformationMessage(
             'You need to paste your Overleaf cookies to login.',
-            'How to get cookies?',
-            'Continue'
+            'Continue',
+            'How to get cookies?'
         );
 
         if (!helpChoice) return;
@@ -640,15 +641,14 @@ async function cmdLinkFolder(context: vscode.ExtensionContext) {
 
     const project = selected.project;
 
-    const folderSelection = await vscode.window.showOpenDialog({
-        title: `Choose a local folder for "${project.name}"`,
-        canSelectFiles: false,
-        canSelectFolders: true,
-        canSelectMany: false,
-        openLabel: 'Link This Folder',
+    const folderPath = await vscode.window.showInputBox({
+        title: `Local folder for "${project.name}"`,
+        prompt: 'Enter an absolute path. GitLeaf creates the folder if it does not exist.',
+        placeHolder: process.platform === 'win32' ? 'C:\\Projects\\MyProject' : '/home/user/projects/my-project',
+        validateInput: value => path.isAbsolute(value.trim()) ? undefined : 'Enter an absolute folder path.',
     });
-    const workspaceFolder = folderSelection?.[0];
-    if (!workspaceFolder) return;
+    if (!folderPath) return;
+    const workspaceFolder = vscode.Uri.file(path.normalize(folderPath.trim()));
 
     const modeSelection = await vscode.window.showQuickPick([
         {
@@ -671,6 +671,12 @@ async function cmdLinkFolder(context: vscode.ExtensionContext) {
     const settingsManager = SettingsManager.getInstance(workspaceFolder);
     if (await settingsManager.isLinked()) {
         vscode.window.showWarningMessage('GitLeaf: The selected folder is already linked.');
+        return;
+    }
+    try {
+        await vscode.workspace.fs.createDirectory(workspaceFolder);
+    } catch (error) {
+        void vscode.window.showErrorMessage(`GitLeaf: Could not create the local folder: ${errorMessage(error)}`);
         return;
     }
     const controller = new OfflineController(settingsManager, credentialManager, gitContentProvider, historyGraph, log);
