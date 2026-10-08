@@ -43,8 +43,10 @@ function verifyVsix(entries, target, expected) {
 }
 
 if (require.main === module) {
-    const [file, target] = process.argv.slice(2);
-    verifyVsix(unzipSync(fs.readFileSync(file)), target, JSON.parse(fs.readFileSync('package.json', 'utf8')));
+    const [file, target, version] = process.argv.slice(2);
+    const expected = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    if (version) expected.version = version;
+    verifyVsix(unzipSync(fs.readFileSync(file)), target, expected);
     console.log(`Verified ${file}: platform, native binary, CLI, metadata and public files.`);
 }
 

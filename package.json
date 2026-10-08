@@ -477,6 +477,7 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src scripts --ext ts,cjs",
     "check": "npm run compile && npm run lint",
+    "package:debug": "node scripts/package-debug.cjs",
     "test": "node ./out/test/runTest.js && node ./out/test/cliTest.js && npm run test:cli-install",
     "test:cli": "node ./out/test/cliTest.js",
     "test:cli-install": "node --test scripts/test-cli-install.cjs",
