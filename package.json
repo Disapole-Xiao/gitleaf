@@ -497,7 +497,7 @@
     "typescript": "^5.3.0"
   },
   "dependencies": {
-    "@napi-rs/keyring": "2.0.0",
+    "@napi-rs/keyring": "2.1.0",
     "cmd-shim": "8.0.0",
     "diff-match-patch": "^1.0.5",
     "fflate": "0.8.3",

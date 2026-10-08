@@ -27,7 +27,8 @@ export function serverUrl(value: string): string {
 export class Credentials implements CredentialStore {
     private async entry(server: string): Promise<AsyncEntry> {
         const { AsyncEntry } = await import('@napi-rs/keyring');
-        return new AsyncEntry('GitLeaf', serverUrl(server));
+        const options = process.platform === 'linux' ? { linux: { store: 'secret-service' as const } } : undefined;
+        return new AsyncEntry('GitLeaf', serverUrl(server), options);
     }
     async getCredential(server: string): Promise<ServerCredential | undefined> {
         const value = await (await this.entry(server)).getPassword();
