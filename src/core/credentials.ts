@@ -1,4 +1,4 @@
-import type { AsyncEntry } from '@napi-rs/keyring';
+import type { AsyncEntry, EntryOptions } from '@napi-rs/keyring';
 import { BaseAPI } from '../api/base';
 export interface Identity {
     csrfToken: string;
@@ -27,7 +27,9 @@ export function serverUrl(value: string): string {
 export class Credentials implements CredentialStore {
     private async entry(server: string): Promise<AsyncEntry> {
         const { AsyncEntry } = await import('@napi-rs/keyring');
-        const options = process.platform === 'linux' ? { linux: { store: 'secret-service' as const } } : undefined;
+        const options: EntryOptions | undefined = process.platform === 'linux'
+            ? { linux: { store: process.env.DBUS_SESSION_BUS_ADDRESS ? 'secret-service' : 'keyutils' } }
+            : undefined;
         return new AsyncEntry('GitLeaf', serverUrl(server), options);
     }
     async getCredential(server: string): Promise<ServerCredential | undefined> {

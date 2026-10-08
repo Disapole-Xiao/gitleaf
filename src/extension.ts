@@ -516,6 +516,7 @@ async function cmdLogin() {
         return;
     }
 
+    let secret: { cookies: string } | { email: string; password: string };
     if (isOfficialServer) {
         // Show help option before asking for cookies
         const helpChoice = await vscode.window.showInformationMessage(
@@ -539,10 +540,7 @@ async function cmdLogin() {
 
         if (!cookies) return;
 
-        const result = await login(credentialManager, serverUrl, { cookies });
-        await vscode.workspace.getConfiguration('gitleaf').update('defaultServer', serverUrl, vscode.ConfigurationTarget.Global);
-        await setAuthState('valid');
-        void vscode.window.showInformationMessage(`GitLeaf: Logged in as ${result.userEmail}`);
+        secret = { cookies };
     } else {
         // For self-hosted, use email/password
         const email = await vscode.window.showInputBox({
@@ -559,10 +557,19 @@ async function cmdLogin() {
 
         if (!password) return;
 
-        const result = await login(credentialManager, serverUrl, { email, password });
+        secret = { email, password };
+    }
+
+    try {
+        const result = await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'GitLeaf: Logging in' },
+            () => login(credentialManager, serverUrl, secret),
+        );
         await vscode.workspace.getConfiguration('gitleaf').update('defaultServer', serverUrl, vscode.ConfigurationTarget.Global);
         await setAuthState('valid');
         void vscode.window.showInformationMessage(`GitLeaf: Logged in as ${result.userEmail}`);
+    } catch (error) {
+        void vscode.window.showErrorMessage(`GitLeaf: Login failed: ${errorMessage(error)}`);
     }
 }
 
