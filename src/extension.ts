@@ -690,12 +690,19 @@ async function cmdLinkFolder(context: vscode.ExtensionContext) {
         await updateLoginStatus();
         void vscode.window.showInformationMessage(`GitLeaf: Linked to "${project.name}"`);
     } catch (error) {
+        const downloaded = !!settingsManager.getSettings()?.lastSynced;
         if (settingsManager.getSettings()) {
             await settingsManager.update({ mode: 'offline', autoSync: false });
             await initializeSync(context, settingsManager);
         }
-        log(`Initial project download failed: ${errorMessage(error)}`);
-        void vscode.window.showErrorMessage(`GitLeaf: Initial download failed. Use Pull to retry. ${errorMessage(error)}`);
+        log(`Project setup failed: ${error instanceof Error ? error.stack || error.message : String(error)}`);
+        if (downloaded) {
+            void vscode.window.showWarningMessage(
+                `GitLeaf: Project downloaded and linked Offline. Setup stopped: ${errorMessage(error)}`,
+            );
+        } else {
+            void vscode.window.showErrorMessage(`GitLeaf: Initial download failed. Use Pull to retry. ${errorMessage(error)}`);
+        }
     } finally { controller.dispose(); }
 }
 
