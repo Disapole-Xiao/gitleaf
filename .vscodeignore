@@ -25,6 +25,8 @@ tsconfig.json
 **/*.map
 out/test/**
 scripts/test-*.cjs
+scripts/package-debug.cjs
+scripts/*.c
 *.vsix
 *.tgz
 .npmignore

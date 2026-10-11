@@ -4,6 +4,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { COMMANDS, EXTENSION_NAME, STATUS_BAR_PRIORITY, CONFIG_DIR, IGNORE_FILE } from './consts';
 import { Credentials, login, projects } from './core/credentials';
 import { EditorState } from './utils/editorState';
@@ -516,12 +517,13 @@ async function cmdLogin() {
         return;
     }
 
+    let secret: { cookies: string } | { email: string; password: string };
     if (isOfficialServer) {
-        // Show help option before asking for cookies
+        // The first notification action is the primary button.
         const helpChoice = await vscode.window.showInformationMessage(
             'You need to paste your Overleaf cookies to login.',
-            'How to get cookies?',
-            'Continue'
+            'Continue',
+            'How to get cookies?'
         );
 
         if (!helpChoice) return;
@@ -539,10 +541,7 @@ async function cmdLogin() {
 
         if (!cookies) return;
 
-        const result = await login(credentialManager, serverUrl, { cookies });
-        await vscode.workspace.getConfiguration('gitleaf').update('defaultServer', serverUrl, vscode.ConfigurationTarget.Global);
-        await setAuthState('valid');
-        void vscode.window.showInformationMessage(`GitLeaf: Logged in as ${result.userEmail}`);
+        secret = { cookies };
     } else {
         // For self-hosted, use email/password
         const email = await vscode.window.showInputBox({
@@ -559,10 +558,19 @@ async function cmdLogin() {
 
         if (!password) return;
 
-        const result = await login(credentialManager, serverUrl, { email, password });
+        secret = { email, password };
+    }
+
+    try {
+        const result = await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'GitLeaf: Logging in' },
+            () => login(credentialManager, serverUrl, secret),
+        );
         await vscode.workspace.getConfiguration('gitleaf').update('defaultServer', serverUrl, vscode.ConfigurationTarget.Global);
         await setAuthState('valid');
         void vscode.window.showInformationMessage(`GitLeaf: Logged in as ${result.userEmail}`);
+    } catch (error) {
+        void vscode.window.showErrorMessage(`GitLeaf: Login failed: ${errorMessage(error)}`);
     }
 }
 
@@ -633,15 +641,14 @@ async function cmdLinkFolder(context: vscode.ExtensionContext) {
 
     const project = selected.project;
 
-    const folderSelection = await vscode.window.showOpenDialog({
-        title: `Choose a local folder for "${project.name}"`,
-        canSelectFiles: false,
-        canSelectFolders: true,
-        canSelectMany: false,
-        openLabel: 'Link This Folder',
+    const folderPath = await vscode.window.showInputBox({
+        title: `Local folder for "${project.name}"`,
+        prompt: 'Enter an absolute path. GitLeaf creates the folder if it does not exist.',
+        placeHolder: process.platform === 'win32' ? 'C:\\Projects\\MyProject' : '/home/user/projects/my-project',
+        validateInput: value => path.isAbsolute(value.trim()) ? undefined : 'Enter an absolute folder path.',
     });
-    const workspaceFolder = folderSelection?.[0];
-    if (!workspaceFolder) return;
+    if (!folderPath) return;
+    const workspaceFolder = vscode.Uri.file(path.normalize(folderPath.trim()));
 
     const modeSelection = await vscode.window.showQuickPick([
         {
@@ -666,6 +673,12 @@ async function cmdLinkFolder(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage('GitLeaf: The selected folder is already linked.');
         return;
     }
+    try {
+        await vscode.workspace.fs.createDirectory(workspaceFolder);
+    } catch (error) {
+        void vscode.window.showErrorMessage(`GitLeaf: Could not create the local folder: ${errorMessage(error)}`);
+        return;
+    }
     const controller = new OfflineController(settingsManager, credentialManager, gitContentProvider, historyGraph, log);
     try {
         await controller.core.link({ serverUrl, projectId: project.id, projectName: project.name });
@@ -677,12 +690,19 @@ async function cmdLinkFolder(context: vscode.ExtensionContext) {
         await updateLoginStatus();
         void vscode.window.showInformationMessage(`GitLeaf: Linked to "${project.name}"`);
     } catch (error) {
+        const downloaded = !!settingsManager.getSettings()?.lastSynced;
         if (settingsManager.getSettings()) {
             await settingsManager.update({ mode: 'offline', autoSync: false });
             await initializeSync(context, settingsManager);
         }
-        log(`Initial project download failed: ${errorMessage(error)}`);
-        void vscode.window.showErrorMessage(`GitLeaf: Initial download failed. Use Pull to retry. ${errorMessage(error)}`);
+        log(`Project setup failed: ${error instanceof Error ? error.stack || error.message : String(error)}`);
+        if (downloaded) {
+            void vscode.window.showWarningMessage(
+                `GitLeaf: Project downloaded and linked Offline. Setup stopped: ${errorMessage(error)}`,
+            );
+        } else {
+            void vscode.window.showErrorMessage(`GitLeaf: Initial download failed. Use Pull to retry. ${errorMessage(error)}`);
+        }
     } finally { controller.dispose(); }
 }
 

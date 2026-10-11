@@ -1,5 +1,6 @@
-import type { AsyncEntry } from '@napi-rs/keyring';
+import type { AsyncEntry, EntryOptions } from '@napi-rs/keyring';
 import { BaseAPI } from '../api/base';
+import { linuxKeyring } from './linuxKeyring';
 export interface Identity {
     csrfToken: string;
     cookies: string;
@@ -25,12 +26,20 @@ export function serverUrl(value: string): string {
 /** Shared OS vault identity in Node and Electron. Never fall back to plaintext
  * or access VS Code's private credential storage. Locked keyrings fail closed. */
 export class Credentials implements CredentialStore {
+    private get headlessLinux(): boolean {
+        return process.platform === 'linux' && !process.env.DBUS_SESSION_BUS_ADDRESS;
+    }
     private async entry(server: string): Promise<AsyncEntry> {
         const { AsyncEntry } = await import('@napi-rs/keyring');
-        return new AsyncEntry('GitLeaf', serverUrl(server));
+        const options: EntryOptions | undefined = process.platform === 'linux'
+            ? { linux: { store: 'secret-service' } }
+            : undefined;
+        return new AsyncEntry('GitLeaf', serverUrl(server), options);
     }
     async getCredential(server: string): Promise<ServerCredential | undefined> {
-        const value = await (await this.entry(server)).getPassword();
+        const value = this.headlessLinux
+            ? await linuxKeyring('get', serverUrl(server))
+            : await (await this.entry(server)).getPassword();
         if (!value) return;
         let data: ServerCredential;
         try {
@@ -46,12 +55,13 @@ export class Credentials implements CredentialStore {
         return data;
     }
     async storeCredential(data: ServerCredential): Promise<void> {
-        await (
-            await this.entry(data.serverUrl)
-        ).setPassword(JSON.stringify({ ...data, serverUrl: serverUrl(data.serverUrl) }));
+        const value = JSON.stringify({ ...data, serverUrl: serverUrl(data.serverUrl) });
+        if (this.headlessLinux) await linuxKeyring('set', serverUrl(data.serverUrl), value);
+        else await (await this.entry(data.serverUrl)).setPassword(value);
     }
     async deleteCredential(server: string): Promise<void> {
-        await (await this.entry(server)).deleteCredential();
+        if (this.headlessLinux) await linuxKeyring('delete', serverUrl(server));
+        else await (await this.entry(server)).deleteCredential();
     }
     async hasCredential(server: string): Promise<boolean> {
         return !!(await this.getCredential(server));

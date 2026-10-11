@@ -13,6 +13,7 @@ import { HistoryRequestError, historyRetryAt, historyResponseDiagnostic } from '
 // Identify the actual extension, not node-fetch's generic default (which
 // Overleaf rejected on history diffs). Read the shipped version, never spoof a browser.
 const USER_AGENT = `GitLeaf/${(require('../../package.json') as { version: string }).version}`;
+const LOGIN_TIMEOUT_MS = 30000;
 
 export interface ProjectInfo {
     id: string;
@@ -109,6 +110,7 @@ export class BaseAPI {
             method: 'GET',
             redirect: 'manual',
             agent: this.agent,
+            timeout: LOGIN_TIMEOUT_MS,
         });
         const body = await res.text();
         const match = body.match(/<input.*name="_csrf".*value="([^"]*)"/);
@@ -129,6 +131,7 @@ export class BaseAPI {
             method: 'GET',
             redirect: 'manual',
             agent: this.agent,
+            timeout: LOGIN_TIMEOUT_MS,
             headers: {
                 'Connection': 'keep-alive',
                 'Cookie': cookies,
@@ -154,6 +157,7 @@ export class BaseAPI {
     private async getUserName(cookies: string, userId: string): Promise<string> {
         const res = await fetch(this.url + 'user/settings', {
             method: 'GET', redirect: 'manual', agent: this.agent,
+            timeout: LOGIN_TIMEOUT_MS,
             headers: { Cookie: cookies },
         });
         if (!res.ok) throw new Error('Could not read the Overleaf account name.');
@@ -182,6 +186,7 @@ export class BaseAPI {
             method: 'GET',
             redirect: 'manual',
             agent: this.agent,
+            timeout: LOGIN_TIMEOUT_MS,
             headers: {
                 'Connection': 'keep-alive',
                 'Cookie': identity.cookies,
@@ -227,6 +232,7 @@ export class BaseAPI {
             method: 'POST',
             redirect: 'manual',
             agent: this.agent,
+            timeout: LOGIN_TIMEOUT_MS,
             headers: {
                 'Accept': '*/*',
                 'Accept-Encoding': 'gzip, deflate, br',

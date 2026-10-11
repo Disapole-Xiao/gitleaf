@@ -2,6 +2,11 @@
 
 Only versions released on the Visual Studio Marketplace are listed here.
 
+## 1.1.3 — 2026-10-11
+
+- Improved the login and project linking UI.
+- Fixed login failures on Linux.
+
 ## 1.1.2 — 2026-09-29
 
 ### New Features

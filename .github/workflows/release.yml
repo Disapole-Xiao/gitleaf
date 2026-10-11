@@ -68,6 +68,11 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npx --no-install eslint .github/scripts --ext cjs --no-ignore
+      - name: Build Linux keyring session helper
+        if: matrix.target == 'linux-x64'
+        run: |
+          mkdir -p bin
+          cc -O2 -Wall -Wextra -o bin/keyring-session scripts/keyring-session.c
       - name: Check native module and CLI startup
         run: |
           node -e "require('node:assert/strict').equal(process.platform + '-' + process.arch, process.env.TARGET); require('@napi-rs/keyring');"
